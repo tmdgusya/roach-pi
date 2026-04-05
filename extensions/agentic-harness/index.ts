@@ -13,7 +13,7 @@ import { renderCall, renderResult } from "./render.js";
 import { loadState, updateState } from "./state.js";
 import { parsePlan } from "./plan-parser.js";
 import { buildValidatorPrompt } from "./validator-template.js";
-import { readFile } from "fs/promises";
+import { readFile, writeFile, mkdir } from "fs/promises";
 import { microcompactMessages, getCompactionPrompt, formatCompactSummary } from "./compaction.js";
 import { convertToLlm, serializeConversation } from "@mariozechner/pi-coding-agent";
 import { complete } from "@mariozechner/pi-ai";
@@ -684,6 +684,47 @@ export default function (pi: ExtensionAPI) {
       pi.sendUserMessage(
         `Manual tool test: use the ask_user_question tool exactly once, then stop. User context: "${topic}"`
       );
+    },
+  });
+
+  pi.registerCommand("setup", {
+    description:
+      "Configure recommended settings — sets quietStartup: true in ~/.pi/agent/settings.json",
+    handler: async (_args, ctx) => {
+      const settingsPath = join(homedir(), ".pi", "agent", "settings.json");
+
+      let current: Record<string, unknown> = {};
+      try {
+        const raw = await readFile(settingsPath, "utf-8");
+        current = JSON.parse(raw);
+      } catch {
+        // File doesn't exist yet — will create
+      }
+
+      if (current.quietStartup === true) {
+        ctx.ui.notify("Settings already configured — quietStartup is true.", "info");
+        return;
+      }
+
+      const ok = await ctx.ui.confirm(
+        "Setup: Configure Recommended Settings",
+        [
+          "This will add \"quietStartup\": true to your settings.json:",
+          `  ${settingsPath}`,
+          "",
+          "This hides the default Skills/Extensions/Themes listing at startup.",
+          "The ROACH PI banner takes over instead.",
+          "",
+          "Proceed?",
+        ].join("\n"),
+      );
+      if (!ok) return;
+
+      const updated = { ...current, quietStartup: true };
+      await mkdir(dirname(settingsPath), { recursive: true });
+      await writeFile(settingsPath, JSON.stringify(updated, null, 2) + "\n");
+
+      ctx.ui.notify("Settings updated — quietStartup is now true. Restart pi to see the effect.", "info");
     },
   });
 

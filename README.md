@@ -10,6 +10,8 @@ The agent dynamically generates questions, selects reviewers, and drives workflo
 pi install git:github.com/tmdgusya/pi-engineering-discipline-extension
 ```
 
+> ⚠️ **If you have the `superpowers` skill installed, remove it before using this extension.** The `superpowers` skill conflicts with this extension's bundled skills (e.g., `agentic-clarification`, `agentic-plan-crafting`, `agentic-karpathy`). Duplicate skill names can cause unexpected behavior since skill loading does not guarantee extension override.
+
 ## Features
 
 ### Commands
@@ -18,6 +20,7 @@ pi install git:github.com/tmdgusya/pi-engineering-discipline-extension
 - **`/ultraplan`**: The agent dispatches all 5 reviewer perspectives (Feasibility, Architecture, Risk, Dependency, User Value) in parallel via the subagent tool, then synthesizes findings into a milestone DAG.
 - **`/ask`**: Manual test command for the `ask_user_question` tool.
 - **`/reset-phase`**: Resets the workflow phase to idle.
+- **`/setup`**: Configures recommended settings — sets `quietStartup: true` in `~/.pi/agent/settings.json`.
 
 ### Tools
 - **`ask_user_question`**: The agent calls this autonomously whenever it encounters ambiguity — generating questions and choices dynamically based on context.

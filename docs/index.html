@@ -113,14 +113,12 @@
           <span data-lang="ko">권장 설정</span>
         </h3>
         <p data-lang="en">
-          Add <code>"quietStartup": true</code> to <code>~/.pi/agent/settings.json</code> to hide the default startup listing. The extension provides its own custom ROACH PI banner.
+          After installing, run <code>/setup</code> in pi to configure <code>quietStartup: true</code> in <code>~/.pi/agent/settings.json</code>. This hides the default startup listing — the extension provides its own custom ROACH PI banner.
         </p>
         <p data-lang="ko">
-          <code>~/.pi/agent/settings.json</code>에 <code>"quietStartup": true</code>를 추가하여 기본 시작 목록을 숨기세요. 익스텐션이 자체 ROACH PI 배너를 제공합니다.
+          설치 후 pi에서 <code>/setup</code>을 실행하여 <code>~/.pi/agent/settings.json</code>에 <code>quietStartup: true</code>를 설정하세요. 기본 시작 목록을 숨기고 익스텐션이 자체 ROACH PI 배너를 제공합니다.
         </p>
-        <pre style="margin-top: 0.75rem;"><code>{
-  "quietStartup": true
-}</code></pre>
+        <pre style="margin-top: 0.75rem;"><code>/setup</code></pre>
       </div>
     </section>
 
@@ -140,6 +138,20 @@
       </p>
 
       <ol class="step-list" style="margin-top: 1.5rem;">
+
+        <li>
+          <h3>
+            <code>/setup</code>
+            <span data-lang="en"> — Configure Settings</span>
+            <span data-lang="ko"> — 설정 구성</span>
+          </h3>
+          <p data-lang="en">
+            Run once after installation to apply recommended settings. Sets <code>quietStartup: true</code> so the extension's custom ROACH PI banner replaces the default startup listing.
+          </p>
+          <p data-lang="ko">
+            설치 후 한 번 실행하여 권장 설정을 적용합니다. 익스텐션의 커스텀 ROACH PI 배너가 기본 시작 목록을 대체하도록 <code>quietStartup: true</code>를 설정합니다.
+          </p>
+        </li>
 
         <li>
           <h3>
