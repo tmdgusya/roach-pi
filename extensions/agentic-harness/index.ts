@@ -1,4 +1,6 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { keyHint, keyText, rawKeyHint } from "@mariozechner/pi-coding-agent";
+import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { homedir } from "os";
 import { join, dirname } from "path";
@@ -376,7 +378,7 @@ export default function (pi: ExtensionAPI) {
     idle: "",
     clarifying: [
       "\n\n## Active Workflow: Clarification",
-      "You are in clarification mode. Follow the clarification skill rules strictly:",
+      "You are in agentic-clarification mode. Follow the agentic-clarification skill rules strictly:",
       "- Ask ONE question per message using the ask_user_question tool.",
       "- Generate questions and choices dynamically based on context — no predefined templates.",
       "- Use the subagent tool with agent 'explorer' to investigate the codebase in parallel with user Q&A.",
@@ -386,7 +388,7 @@ export default function (pi: ExtensionAPI) {
     ].join("\n"),
     planning: [
       "\n\n## Active Workflow: Plan Crafting",
-      "You are in plan-crafting mode. Follow the plan-crafting skill rules strictly:",
+      "You are in agentic-plan-crafting mode. Follow the agentic-plan-crafting skill rules strictly:",
       "- Write an executable implementation plan from the current context.",
       "- Every step must be executable — no placeholders.",
       "- Use ask_user_question if you need to resolve any remaining ambiguity.",
@@ -394,7 +396,7 @@ export default function (pi: ExtensionAPI) {
     ].join("\n"),
     ultraplanning: [
       "\n\n## Active Workflow: Milestone Planning (Ultraplan)",
-      "You are in milestone-planning mode. Follow the milestone-planning skill rules strictly:",
+      "You are in agentic-milestone-planning mode. Follow the agentic-milestone-planning skill rules strictly:",
       "- Compose a Problem Brief from the current context.",
       "- Dispatch all 5 reviewer agents in parallel using the subagent tool's parallel mode: reviewer-feasibility, reviewer-architecture, reviewer-risk, reviewer-dependency, reviewer-user-value.",
       "- Synthesize all reviewer findings into a milestone DAG.",
@@ -578,7 +580,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerCommand("clarify", {
     description:
-      "Start clarification — the agent asks dynamic questions to resolve ambiguity",
+      "Start agentic-clarification — the agent asks dynamic questions to resolve ambiguity",
     handler: async (args, ctx) => {
       const topic = args?.trim() || "";
       const start = await ctx.ui.confirm(
@@ -593,8 +595,8 @@ export default function (pi: ExtensionAPI) {
       ctx.ui.setStatus("harness", "Clarification in progress...");
 
       const prompt = topic
-        ? `The user wants to clarify the following request: "${topic}"\n\nBegin the clarification process. Follow the clarification skill rules. Ask ONE question using the ask_user_question tool. Use the subagent tool with agent 'explorer' to investigate relevant parts of the codebase in parallel.`
-        : `The user wants to start a clarification session for their current task.\n\nBegin the clarification process. Follow the clarification skill rules. Ask ONE question using the ask_user_question tool to understand what the user wants to accomplish. Use the subagent tool with agent 'explorer' to investigate the codebase in parallel.`;
+        ? `The user wants to clarify the following request: "${topic}"\n\nBegin the agentic-clarification process. Follow the agentic-clarification skill rules. Ask ONE question using the ask_user_question tool. Use the subagent tool with agent 'explorer' to investigate relevant parts of the codebase in parallel.`
+        : `The user wants to start an agentic-clarification session for their current task.\n\nBegin the agentic-clarification process. Follow the agentic-clarification skill rules. Ask ONE question using the ask_user_question tool to understand what the user wants to accomplish. Use the subagent tool with agent 'explorer' to investigate the codebase in parallel.`;
 
       pi.sendUserMessage(prompt);
     },
@@ -602,22 +604,22 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerCommand("plan", {
     description:
-      "Generate an implementation plan — the agent follows plan-crafting skill rules",
+      "Generate an implementation plan — the agent follows agentic-plan-crafting skill rules",
     handler: async (args, ctx) => {
       const ok = await ctx.ui.confirm(
-        "Start Plan Crafting",
-        "The agent will create an executable implementation plan based on current context.\n\nProceed?"
+        "Start Agentic Plan Crafting",
+        "The agent will create an executable implementation plan based on current context using the agentic-plan-crafting workflow.\n\nProceed?"
       );
       if (!ok) return;
 
       currentPhase = "planning";
       updateState(STATE_FILE, { phase: "planning" }).catch(() => {});
-      ctx.ui.setStatus("harness", "Plan crafting in progress...");
+      ctx.ui.setStatus("harness", "Agentic planning workflow in progress...");
 
       const topic = args?.trim() || "";
       const prompt = topic
-        ? `Create an executable implementation plan for: "${topic}"\n\nFollow the plan-crafting skill rules. If a Context Brief exists from a previous clarification, use it as input. If not, use the ask_user_question tool to confirm goal, scope, and tech stack before writing the plan.`
-        : `Create an executable implementation plan for the current task.\n\nFollow the plan-crafting skill rules. If a Context Brief exists from a previous clarification, use it as input. If not, use the ask_user_question tool to confirm goal, scope, and tech stack before writing the plan.`;
+        ? `Create an executable implementation plan for: "${topic}"\n\nFollow the agentic-plan-crafting skill rules. If a Context Brief exists from a previous agentic-clarification, use it as input. If not, use the ask_user_question tool to confirm goal, scope, and tech stack before writing the plan.`
+        : `Create an executable implementation plan for the current task.\n\nFollow the agentic-plan-crafting skill rules. If a Context Brief exists from a previous agentic-clarification, use it as input. If not, use the ask_user_question tool to confirm goal, scope, and tech stack before writing the plan.`;
 
       pi.sendUserMessage(prompt);
     },
@@ -628,19 +630,19 @@ export default function (pi: ExtensionAPI) {
       "Decompose a complex task into milestones — the agent dynamically selects reviewers",
     handler: async (args, ctx) => {
       const confirmed = await ctx.ui.confirm(
-        "Start Milestone Planning (Ultraplan)",
+        "Start Agentic Milestone Planning (Ultraplan)",
         "The agent will:\n1. Compose a Problem Brief\n2. Decide which reviewer perspectives are needed\n3. Dispatch reviewers in parallel\n4. Synthesize a milestone DAG\n\nProceed?"
       );
       if (!confirmed) return;
 
       currentPhase = "ultraplanning";
       updateState(STATE_FILE, { phase: "ultraplanning" }).catch(() => {});
-      ctx.ui.setStatus("harness", "Milestone planning in progress...");
+      ctx.ui.setStatus("harness", "Agentic milestone workflow in progress...");
 
       const topic = args?.trim() || "";
       const prompt = topic
-        ? `Decompose the following complex task into milestones: "${topic}"\n\nFollow the milestone-planning skill rules. First compose a Problem Brief. Then dispatch all 5 reviewer agents in parallel using the subagent tool: reviewer-feasibility, reviewer-architecture, reviewer-risk, reviewer-dependency, reviewer-user-value. After all reviewers complete, synthesize their findings into a milestone DAG.`
-        : `Decompose the current complex task into milestones.\n\nFollow the milestone-planning skill rules. First compose a Problem Brief from the current context. Then dispatch all 5 reviewer agents in parallel using the subagent tool: reviewer-feasibility, reviewer-architecture, reviewer-risk, reviewer-dependency, reviewer-user-value. After all reviewers complete, synthesize their findings into a milestone DAG.`;
+        ? `Decompose the following complex task into milestones: "${topic}"\n\nFollow the agentic-milestone-planning skill rules. First compose a Problem Brief. Then dispatch all 5 reviewer agents in parallel using the subagent tool: reviewer-feasibility, reviewer-architecture, reviewer-risk, reviewer-dependency, reviewer-user-value. After all reviewers complete, synthesize their findings into a milestone DAG.`
+        : `Decompose the current complex task into milestones.\n\nFollow the agentic-milestone-planning skill rules. First compose a Problem Brief from the current context. Then dispatch all 5 reviewer agents in parallel using the subagent tool: reviewer-feasibility, reviewer-architecture, reviewer-risk, reviewer-dependency, reviewer-user-value. After all reviewers complete, synthesize their findings into a milestone DAG.`;
 
       pi.sendUserMessage(prompt);
     },
@@ -703,6 +705,31 @@ export default function (pi: ExtensionAPI) {
     const saved = await loadState(STATE_FILE);
     currentPhase = saved.phase;
     activeGoalDocument = saved.activeGoalDocument;
+
+    // Custom header: ROACH PI ASCII art banner
+    ctx.ui.setHeader((_tui, theme) => {
+      const banner = [
+        "██████╗  ██████╗  █████╗  ██████╗██╗  ██╗    ██████╗ ██╗",
+        "██╔══██╗██╔═══██╗██╔══██╗██╔════╝██║  ██║    ██╔══██╗██║",
+        "██████╔╝██║   ██║███████║██║     ███████║    ██████╔╝██║",
+        "██╔══██╗██║   ██║██╔══██║██║     ██╔══██║    ██╔═══╝ ██║",
+        "██║  ██║╚██████╔╝██║  ██║╚██████╗██║  ██║    ██║     ██║",
+        "╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝    ╚═╝     ╚═╝",
+      ].map(line => theme.bold(theme.fg("accent", line))).join("\n");
+
+      const tagline = theme.fg("dim", "Engineering Discipline Extension");
+
+      const hints = [
+        keyHint("app.interrupt", "to interrupt"),
+        keyHint("app.clear", "to clear"),
+        rawKeyHint(`${keyText("app.clear")} twice`, "to exit"),
+        keyHint("app.tools.expand", "to expand tools"),
+        rawKeyHint("/", "for commands"),
+        rawKeyHint("!", "to run bash"),
+      ].join("\n");
+
+      return new Text(`\n${banner}\n${tagline}\n\n${hints}`, 1, 0);
+    });
 
     ctx.ui.notify(
       "Agentic Harness loaded: /clarify, /plan, /ultraplan, /ask, /reset-phase",

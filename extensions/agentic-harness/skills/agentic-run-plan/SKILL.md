@@ -1,5 +1,5 @@
 ---
-name: run-plan
+name: agentic-run-plan
 description: Use when you have a written implementation plan to execute. Loads the plan, reviews critically, executes tasks in dependency order, and reports completion. Triggers when the user says "run the plan", "execute the plan", or "let's start implementing".
 ---
 
@@ -23,14 +23,14 @@ Do not follow plans blindly. If the plan has issues, flag them before executing.
 
 ## When To Use
 
-- After a plan has been crafted with the `plan-crafting` skill
+- After a plan has been crafted with the `agentic-plan-crafting` skill
 - When the user says "run this plan" or "execute the plan"
 - When a plan document exists and implementation should begin
 
 ## When NOT To Use
 
-- When no plan document exists yet (use `plan-crafting` first)
-- When work scope is still ambiguous (return to the `clarification` skill)
+- When no plan document exists yet (use `agentic-plan-crafting` first)
+- When work scope is still ambiguous (return to the `agentic-clarification` skill)
 - Single-step tasks that don't need a plan
 
 ## Process
@@ -39,7 +39,7 @@ Do not follow plans blindly. If the plan has issues, flag them before executing.
 
 Before reviewing the plan, discover what the project offers for verification and execution:
 
-1. **Verification infrastructure** — read the plan's `Verification Strategy` header. If present, use it. If absent, run the same discovery as plan-crafting:
+1. **Verification infrastructure** — read the plan's `Verification Strategy` header. If present, use it. If absent, run the same discovery as agentic-plan-crafting:
    - e2e tests → integration tests → verification skills/agents → test suite → build+lint
    - Record the discovered command for use in the E2E Gate (Step 3)
 
@@ -230,7 +230,7 @@ The E2E gate failure means individual tasks passed their validators but the syst
 - You don't understand an instruction
 - Verification fails repeatedly
 
-**Ask for clarification rather than guessing.**
+**Ask for agentic-clarification rather than guessing.**
 
 ## Validator Checklist
 
@@ -263,8 +263,8 @@ After each task completion, verify:
 After plan execution is complete:
 
 - To wrap up the work branch → report results to the user and suggest next steps
-- If independent verification is needed → suggest transitioning to the `review-work` skill
-- If ambiguity is discovered during execution → return to the `clarification` skill to resolve
-- If the plan itself needs modification → return to the `plan-crafting` skill to revise
+- If independent verification is needed → suggest transitioning to the `agentic-review-work` skill
+- If ambiguity is discovered during execution → return to the `agentic-clarification` skill to resolve
+- If the plan itself needs modification → return to the `agentic-plan-crafting` skill to revise
 
 This skill itself **does not invoke the next skill.** It ends by reporting execution results and letting the user choose the next step.

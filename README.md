@@ -14,7 +14,7 @@ pi install git:github.com/tmdgusya/pi-engineering-discipline-extension
 
 ### Commands
 - **`/clarify`**: The agent asks dynamic, context-aware questions one at a time to resolve ambiguity. It generates questions and choices on the fly based on your request, while exploring the codebase via subagents in parallel. Ends with a structured Context Brief.
-- **`/plan`**: Delegates to the agent in strict plan-crafting mode, ensuring executable implementation plans with no placeholders.
+- **`/plan`**: Delegates to the agent in strict agentic-plan-crafting mode, ensuring executable implementation plans with no placeholders.
 - **`/ultraplan`**: The agent dispatches all 5 reviewer perspectives (Feasibility, Architecture, Risk, Dependency, User Value) in parallel via the subagent tool, then synthesizes findings into a milestone DAG.
 - **`/ask`**: Manual test command for the `ask_user_question` tool.
 - **`/reset-phase`**: Resets the workflow phase to idle.
@@ -27,7 +27,7 @@ pi install git:github.com/tmdgusya/pi-engineering-discipline-extension
   - **Chain**: Sequential pipeline where each step uses `{previous}` to reference prior output
 
 ### Event Handlers
-- **`resources_discover`**: Registers `~/engineering-discipline/skills/` so the agent has access to clarification, plan-crafting, and milestone-planning skill rules.
+- **`resources_discover`**: Registers `~/engineering-discipline/skills/` so the agent has access to agentic-clarification, agentic-plan-crafting, and agentic-milestone-planning skill rules.
   - Compatibility mode (default): skills are merged with existing discovered skills.
   - If duplicate skill names exist, the first discovered skill is kept (extension override is not guaranteed).
 - **`before_agent_start`**: Injects workflow phase guidance into the system prompt so the agent stays on track during `/clarify`, `/plan`, or `/ultraplan` sessions.
@@ -53,6 +53,16 @@ You are a fast scout agent. Explore the codebase quickly and report key findings
 Agent locations:
 - **User agents**: `~/.pi/agent/agents/*.md`
 - **Project agents**: `.pi/agents/*.md` (overrides user agents of the same name)
+
+## Recommended Settings
+
+Add `"quietStartup": true` to `~/.pi/agent/settings.json` to hide the default Skills/Extensions/Themes listing at startup. The extension provides its own custom ROACH PI banner via `setHeader`, so the built-in listing is redundant and clutters the screen.
+
+```json
+{
+  "quietStartup": true
+}
+```
 
 ## Prerequisites
 

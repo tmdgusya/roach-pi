@@ -1,5 +1,5 @@
 ---
-name: rob-pike
+name: agentic-rob-pike
 description: Rob Pike's 5 Rules of Programming — a decision framework that prevents premature optimization and enforces measurement-driven development. Use when the user says "optimize", "slow", "performance", "bottleneck", "speed up", "make faster", "too slow", or any request to improve code speed/efficiency. Also use when you notice yourself about to suggest a performance optimization without measurement data. This is a thinking discipline, not a tooling workflow.
 ---
 

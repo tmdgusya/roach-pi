@@ -1,6 +1,6 @@
 ---
-name: review-work
-description: Use after run-plan completes to independently verify the implementation. Reads only the plan document and inspects the codebase from scratch — information-isolated from the execution context. Produces a structured review document with PASS/FAIL verdict. Triggers when the user says "review the work", "verify the implementation", "check if the plan was executed correctly".
+name: agentic-review-work
+description: Use after agentic-run-plan completes to independently verify the implementation. Reads only the plan document and inspects the codebase from scratch — information-isolated from the execution context. Produces a structured review document with PASS/FAIL verdict. Triggers when the user says "review the work", "verify the implementation", "check if the plan was executed correctly".
 ---
 
 # Review Work
@@ -13,7 +13,7 @@ The reviewer shares no memory with the executor. The plan's stated goals and the
 
 ## Hard Gates
 
-1. **Do not receive execution context.** No logs from run-plan, no worker output, no diffs, no task completion summaries, no conversation history. The only input is the plan file path.
+1. **Do not receive execution context.** No logs from agentic-run-plan, no worker output, no diffs, no task completion summaries, no conversation history. The only input is the plan file path.
 2. **Read the plan document directly.** Read the plan file from disk — not a summary or a passed-along description.
 3. **Run all tests yourself.** Do not trust previous execution results. Run the full test suite and every verification command specified in the plan.
 4. **Verdict is PASS or FAIL.** No conditional passes, no "almost done", no "only minor issues remain". Binary only.
@@ -22,14 +22,14 @@ The reviewer shares no memory with the executor. The plan's stated goals and the
 
 ## When To Use
 
-- After run-plan execution is complete
+- After agentic-run-plan execution is complete
 - When the user says "review the work", "verify the implementation", "check if the plan was executed correctly"
 - When implementation is done but independent verification is needed
 
 ## When NOT To Use
 
-- While run-plan is still in progress
-- When no plan document exists (use `plan-crafting` first)
+- While agentic-run-plan is still in progress
+- When no plan document exists (use `agentic-plan-crafting` first)
 - When the goal is a general code review (this skill verifies "implementation against plan")
 
 ## Input
@@ -42,7 +42,7 @@ docs/engineering-discipline/plans/YYYY-MM-DD-<feature-name>.md
 
 The following must never be provided as input:
 
-- Execution logs or task completion summaries from run-plan
+- Execution logs or task completion summaries from agentic-run-plan
 - Output or diffs from worker subagents
 - Validation results from validator subagents
 - Conversation history from the execution session
@@ -185,7 +185,7 @@ Stop immediately and notify the user in the following situations:
 
 | Anti-Pattern | Why It Fails |
 |---|---|
-| Reading run-plan execution logs to verify | Information isolation violation. Anchors on the executor's framing |
+| Reading agentic-run-plan execution logs to verify | Information isolation violation. Anchors on the executor's framing |
 | Trusting previous test results instead of running tests | Environment may have changed after execution. Not independent verification |
 | Finding issues and fixing them directly | Violates separation of reviewer and implementer roles |
 | Giving a "close enough, PASS" verdict | No conditional passes. If criteria are not met, it is FAIL |
@@ -198,7 +198,7 @@ Stop immediately and notify the user in the following situations:
 Self-check when review is complete:
 
 - [ ] Read the plan document directly from disk
-- [ ] Did not receive run-plan execution results as input
+- [ ] Did not receive agentic-run-plan execution results as input
 - [ ] Ran all tests myself
 - [ ] Inspected all tasks in the plan
 - [ ] Verdict is either PASS or FAIL
@@ -209,7 +209,7 @@ Self-check when review is complete:
 After review is complete:
 
 - **PASS** → Report results to the user and suggest next steps (PR creation, deployment, etc.)
-- **FAIL** → Report failure items to the user. If fixes are needed, suggest transitioning to the `run-plan` or `systematic-debugging` skill
-- If the plan itself has issues → suggest returning to the `plan-crafting` skill to revise the plan
+- **FAIL** → Report failure items to the user. If fixes are needed, suggest transitioning to the `agentic-run-plan` or `agentic-systematic-debugging` skill
+- If the plan itself has issues → suggest returning to the `agentic-plan-crafting` skill to revise the plan
 
 This skill itself **does not invoke the next skill.** It saves the review document, reports results, and lets the user decide the next step.

@@ -1,6 +1,6 @@
 ---
-name: milestone-planning
-description: Decomposes complex, multi-day tasks into optimized milestones using parallel reviewer agents (ultraplan). Spawns 5 independent reviewers that analyze the problem from different angles, then synthesizes their findings into a milestone dependency DAG. Triggers when the user says "plan milestones", "break this into milestones", "ultraplan", or when long-run harness needs milestone generation.
+name: agentic-milestone-planning
+description: Decomposes complex, multi-day tasks into optimized milestones using parallel reviewer agents (ultraplan). Spawns 5 independent reviewers that analyze the problem from different angles, then synthesizes their findings into a milestone dependency DAG. Triggers when the user says "plan milestones", "break this into milestones", "ultraplan", or when agentic-long-run harness needs milestone generation.
 ---
 
 # Milestone Planning (Ultraplan)
@@ -9,7 +9,7 @@ Decomposes a complex task into milestones by spawning 5 parallel reviewer agents
 
 ## Core Principle
 
-Milestones are the unit of long-running execution. A bad milestone decomposition cascades into days of wasted work. Therefore milestone generation must be adversarial — multiple independent perspectives must challenge each other before milestones are locked.
+Milestones are the unit of agentic-long-running execution. A bad milestone decomposition cascades into days of wasted work. Therefore milestone generation must be adversarial — multiple independent perspectives must challenge each other before milestones are locked.
 
 ## Hard Gates
 
@@ -19,31 +19,31 @@ Milestones are the unit of long-running execution. A bad milestone decomposition
 4. **Synthesis must address every reviewer's concern.** The synthesis agent must explicitly respond to each finding — accepted, rejected with reason, or deferred to a specific milestone.
 5. **Every milestone must have measurable success criteria.** "Working correctly" is not a criterion. Specific test commands, file existence checks, or behavioral assertions are required.
 6. **Milestone dependencies must form a DAG.** Circular dependencies are a plan failure. Every milestone must have a clear topological ordering.
-7. **Do not generate milestones for trivial tasks.** If the problem can be solved in a single plan-crafting cycle (fewer than ~8 tasks), tell the user to use plan-crafting directly.
+7. **Do not generate milestones for trivial tasks.** If the problem can be solved in a single agentic-plan-crafting cycle (fewer than ~8 tasks), tell the user to use agentic-plan-crafting directly.
 8. **Reviewer outputs must be passed verbatim to the synthesis agent.** Do not summarize, filter, or reframe. Copy each reviewer's full output into the designated placeholder. The main agent must not editorialize the handoff.
 
 ## When To Use
 
 - When the user presents a complex, multi-day task
-- When the long-run harness needs milestone decomposition
+- When the agentic-long-run harness needs milestone decomposition
 - When the user says "plan milestones", "break this into milestones", or "ultraplan"
 - When a task clearly requires multiple independent implementation phases
 
 ## When NOT To Use
 
-- Single-day tasks (use plan-crafting directly)
+- Single-day tasks (use agentic-plan-crafting directly)
 - Tasks with fewer than ~8 implementation steps
-- When milestones are already defined and the user wants execution (use long-run)
-- When work scope is still ambiguous (use clarification first)
+- When milestones are already defined and the user wants execution (use agentic-long-run)
+- When work scope is still ambiguous (use agentic-clarification first)
 
 ## Input
 
 The skill requires a **clear problem statement** as input. This can come from:
 
-1. A Context Brief file produced by the `clarification` skill (preferred)
+1. A Context Brief file produced by the `agentic-clarification` skill (preferred)
 2. A direct, detailed request from the user (must include goal, scope, constraints)
 
-If the input is ambiguous, return to the `clarification` skill before proceeding.
+If the input is ambiguous, return to the `agentic-clarification` skill before proceeding.
 
 ## Process
 
@@ -344,7 +344,7 @@ After dispatching all 5 reviewers, wait for all to complete. If any reviewer fai
 
 After all 5 reviewers complete, dispatch a **Synthesis Agent** that receives all 5 reviewer outputs and produces the final milestone plan.
 
-**Verbatim handoff rule (Hard Gate equivalent):** The main agent must copy each reviewer's full output into the designated `{..._OUTPUT}` placeholder without summarizing, filtering, reframing, or adding commentary. This is the same principle as the run-plan validator's fixed template — the main agent has read all 5 outputs and may unconsciously bias the synthesis by selective framing. Verbatim copy eliminates this channel.
+**Verbatim handoff rule (Hard Gate equivalent):** The main agent must copy each reviewer's full output into the designated `{..._OUTPUT}` placeholder without summarizing, filtering, reframing, or adding commentary. This is the same principle as the agentic-run-plan validator's fixed template — the main agent has read all 5 outputs and may unconsciously bias the synthesis by selective framing. Verbatim copy eliminates this channel.
 
 **What must NOT happen during handoff:**
 - Summarizing a reviewer's output ("The feasibility analyst mainly said...")
@@ -468,12 +468,12 @@ After synthesis, the main agent **automatically appends** an Integration Verific
 - **Abort Point:** No (this is the final gate)
 ```
 
-**Verification Discovery:** During Phase 1 (Problem Framing), run the same verification discovery as plan-crafting:
+**Verification Discovery:** During Phase 1 (Problem Framing), run the same verification discovery as agentic-plan-crafting:
 1. Search for e2e tests → integration tests → verification skills/agents → test suite → build+lint
 2. Record the result in the Problem Brief under a `Verification Strategy` section
 3. The Integration Verification Milestone uses this discovered verification as its primary check
 
-**If no verification infrastructure exists:** The Integration Verification Milestone's plan-crafting phase (during long-run execution) will create the necessary verification as Task 0, same as plan-crafting's behavior.
+**If no verification infrastructure exists:** The Integration Verification Milestone's agentic-plan-crafting phase (during agentic-long-run execution) will create the necessary verification as Task 0, same as agentic-plan-crafting's behavior.
 
 ### Phase 3.6: Independent DAG Validation
 
@@ -526,7 +526,7 @@ docs/engineering-discipline/harness/<session-slug>/
 
 **Created:** YYYY-MM-DD HH:MM
 **Last Updated:** YYYY-MM-DD HH:MM
-**Status:** milestone-planning-complete | executing | paused | completing | completed | failed
+**Status:** agentic-milestone-planning-complete | executing | paused | completing | completed | failed
 
 **Verification Strategy:**
 - **Level:** [e2e | integration | skill/agent | test-suite | build-only]
@@ -597,8 +597,8 @@ Attempts: number of plan-execute-review cycles attempted (incremented at each St
 | Running reviewers sequentially | Wastes time; reviewers are independent |
 | Skipping synthesis and just merging reviewer outputs | Conflicts go unresolved; milestone boundaries are incoherent |
 | Accepting milestones without measurable success criteria | Cannot validate completion; "done" becomes subjective |
-| Creating milestones too large (>12 tasks each) | Exceeds single plan-crafting cycle; risk of context loss |
-| Creating milestones too small (1-2 tasks each) | Overhead of plan-crafting + run-plan + review-work exceeds the work itself |
+| Creating milestones too large (>12 tasks each) | Exceeds single agentic-plan-crafting cycle; risk of context loss |
+| Creating milestones too small (1-2 tasks each) | Overhead of agentic-plan-crafting + agentic-run-plan + agentic-review-work exceeds the work itself |
 | Creating more than 10 milestones without user approval | Compounding risk across milestones; likely needs project split |
 | Ignoring reviewer conflicts | Unresolved conflicts surface during execution when they're expensive to fix |
 | Not saving reviewer outputs | Loses the reasoning behind milestone decisions; cannot audit later |
@@ -622,8 +622,8 @@ Attempts: number of plan-execute-review cycles attempted (incremented at each St
 
 After milestone planning is complete:
 
-- To begin execution → `long-run` skill
-- If ambiguity discovered → return to `clarification` skill
-- If task is too small for milestones → use `plan-crafting` directly
+- To begin execution → `agentic-long-run` skill
+- If ambiguity discovered → return to `agentic-clarification` skill
+- If task is too small for milestones → use `agentic-plan-crafting` directly
 
 This skill itself **does not invoke the next skill.** It ends by presenting the milestone plan and letting the user choose the next step.

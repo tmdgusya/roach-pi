@@ -213,7 +213,7 @@ describe("/clarify Command", () => {
     expect(mockPi.sendUserMessage).toHaveBeenCalledTimes(1);
     const prompt = mockPi.sendUserMessage.mock.calls[0][0];
     expect(prompt).toContain("login feature");
-    expect(prompt).toContain("clarification");
+    expect(prompt).toContain("agentic-clarification");
     expect(prompt).toContain("ask_user_question");
     expect(prompt).toContain("subagent");
   });
@@ -236,7 +236,7 @@ describe("/plan Command", () => {
 
     expect(mockPi.sendUserMessage).toHaveBeenCalledTimes(1);
     const prompt = mockPi.sendUserMessage.mock.calls[0][0];
-    expect(prompt).toContain("plan-crafting");
+    expect(prompt).toContain("agentic-plan-crafting");
   });
 });
 

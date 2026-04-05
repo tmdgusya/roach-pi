@@ -1,5 +1,5 @@
 ---
-name: clarification
+name: agentic-clarification
 description: Use when a user's request is vague, ambiguous, or underspecified. Launches an iterative Q&A loop to resolve ambiguity while a subagent explores the codebase in parallel. Outputs a clear, well-scoped context brief so the user can plan sharply. Triggers on "I want to...", "I need...", "let's build...", "can you help me...", "we should...", or any request where the full scope isn't immediately clear.
 ---
 
@@ -102,7 +102,7 @@ When the subagent returns findings:
 ## Putting It Together: The Loop
 
 ```dot
-digraph clarification {
+digraph agentic-clarification {
     rankdir=TB;
     "User states vague request" [shape=box];
     "Assess: what's ambiguous?" [shape=box];
@@ -195,7 +195,7 @@ docs/engineering-discipline/context/YYYY-MM-DD-<topic>-brief.md
 
 (사용자가 다른 위치를 지정하면 해당 위치를 따른다.)
 
-대화에 먼저 Context Brief를 보여주고, 사용자가 승인하면 파일로 저장한다. 이 파일은 `plan-crafting` 스킬의 입력으로 직접 사용된다.
+대화에 먼저 Context Brief를 보여주고, 사용자가 승인하면 파일로 저장한다. 이 파일은 `agentic-plan-crafting` 스킬의 입력으로 직접 사용된다.
 
 ## Red Flags
 
@@ -233,34 +233,34 @@ After the Context Brief is approved, the **Complexity Assessment verdict** deter
 
 | Verdict | Route | Rationale |
 |---------|-------|-----------|
-| **Simple** (score 5-8) | `plan-crafting` | Task fits in a single plan cycle. Direct planning is sufficient. |
-| **Complex** (score 9-15) | `milestone-planning` | Task requires multiple plan cycles. Milestone decomposition needed before planning. |
+| **Simple** (score 5-8) | `agentic-plan-crafting` | Task fits in a single plan cycle. Direct planning is sufficient. |
+| **Complex** (score 9-15) | `agentic-milestone-planning` | Task requires multiple plan cycles. Milestone decomposition needed before planning. |
 
-**Override:** The user can always override the routing. If the user says "just plan it" for a complex task, route to `plan-crafting`. If the user says "break it into milestones" for a simple task, route to `milestone-planning`.
+**Override:** The user can always override the routing. If the user says "just plan it" for a complex task, route to `agentic-plan-crafting`. If the user says "break it into milestones" for a simple task, route to `agentic-milestone-planning`.
 
-**Edge case (score 8-9):** Present both options to the user with a recommendation. Example: "This scores 9 — borderline complex. I recommend milestone-planning because [dominant factor], but plan-crafting could work if [condition]. Which do you prefer?"
+**Edge case (score 8-9):** Present both options to the user with a recommendation. Example: "This scores 9 — borderline complex. I recommend agentic-milestone-planning because [dominant factor], but agentic-plan-crafting could work if [condition]. Which do you prefer?"
 
 The "Suggested Next Step" field in the Context Brief must reflect this routing:
 
-- Simple: "Proceed to `plan-crafting` — task fits in a single plan cycle."
-- Complex: "Proceed to `milestone-planning` — task requires milestone decomposition for multi-phase execution."
-- Borderline: "Recommend `milestone-planning` (score 9), but `plan-crafting` is viable if [condition]. User choice needed."
+- Simple: "Proceed to `agentic-plan-crafting` — task fits in a single plan cycle."
+- Complex: "Proceed to `agentic-milestone-planning` — task requires milestone decomposition for multi-phase execution."
+- Borderline: "Recommend `agentic-milestone-planning` (score 9), but `agentic-plan-crafting` is viable if [condition]. User choice needed."
 
 ## Transition
 
 Once the Context Brief is approved by the user, route based on the Complexity Assessment:
 
-- **Simple** (score 5-8) → `plan-crafting` skill — single-cycle implementation planning
-- **Complex** (score 9-15) → `milestone-planning` skill — multi-phase milestone decomposition, then `long-run` for execution
+- **Simple** (score 5-8) → `agentic-plan-crafting` skill — single-cycle implementation planning
+- **Complex** (score 9-15) → `agentic-milestone-planning` skill — multi-phase milestone decomposition, then `agentic-long-run` for execution
 - **Borderline** (score 8-9) → present both options with recommendation, user decides
-- If further exploration is needed → `clarification` 스킬 자체의 Q&A 루프 계속
+- If further exploration is needed → `agentic-clarification` 스킬 자체의 Q&A 루프 계속
 - If the scope is already trivial and planning is unnecessary → direct implementation
 
 This skill itself **does not invoke the next skill.** It ends by presenting the Context Brief, saving it to a file, and suggesting the routed next step.
 
-**Context Brief → plan-crafting 매핑:**
+**Context Brief → agentic-plan-crafting 매핑:**
 
-| Context Brief 필드 | plan-crafting 입력 |
+| Context Brief 필드 | agentic-plan-crafting 입력 |
 |---|---|
 | Goal | 계획 헤더의 "목표" |
 | Scope (In/Out) | 계획 헤더의 "작업 범위" |

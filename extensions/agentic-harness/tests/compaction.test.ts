@@ -18,21 +18,21 @@ describe("Compaction Prompts", () => {
 
   it("should include phase-specific section for clarifying", () => {
     const prompt = getCompactionPrompt("clarifying", "docs/brief.md");
-    expect(prompt).toContain("Active Workflow: Clarification");
+    expect(prompt).toContain("Active Workflow: Agentic Clarification");
     expect(prompt).toContain("docs/brief.md");
     expect(prompt).toContain("scope");
   });
 
   it("should include phase-specific section for planning", () => {
     const prompt = getCompactionPrompt("planning", "docs/plan.md");
-    expect(prompt).toContain("Active Workflow: Plan Crafting");
+    expect(prompt).toContain("Active Workflow: Agentic Plan Crafting");
     expect(prompt).toContain("docs/plan.md");
     expect(prompt).toContain("task progress");
   });
 
   it("should include phase-specific section for ultraplanning", () => {
     const prompt = getCompactionPrompt("ultraplanning", "docs/milestones.md");
-    expect(prompt).toContain("Active Workflow: Milestone Planning");
+    expect(prompt).toContain("Active Workflow: Agentic Milestone Planning");
     expect(prompt).toContain("docs/milestones.md");
   });
 

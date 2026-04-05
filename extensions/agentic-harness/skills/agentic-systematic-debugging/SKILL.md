@@ -1,5 +1,5 @@
 ---
-name: systematic-debugging
+name: agentic-systematic-debugging
 description: Use when encountering any bug, test failure, or unexpected behavior. Enforces a strict reproduce-first, root-cause-first, failing-test-first debugging workflow before fixing.
 ---
 

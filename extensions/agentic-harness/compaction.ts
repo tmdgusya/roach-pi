@@ -68,24 +68,24 @@ function getPhaseSection(
   switch (phase) {
     case "clarifying":
       return `${docRef}
-## Active Workflow: Clarification
-The session is in clarification mode. Your summary MUST emphasize:
+## Active Workflow: Agentic Clarification
+The session is in agentic-clarification mode. Your summary MUST emphasize:
 - What scope has been established vs. what remains ambiguous
 - Key decisions made during Q&A
 - The state of the Context Brief (complete, in-progress, or not yet started)`;
 
     case "planning":
       return `${docRef}
-## Active Workflow: Plan Crafting
-The session is in plan-crafting mode. Your summary MUST emphasize:
+## Active Workflow: Agentic Plan Crafting
+The session is in agentic-plan-crafting mode. Your summary MUST emphasize:
 - Overall task progress — which plan tasks are done, in-progress, or blocked
 - Key implementation decisions and their rationale
 - Current task being worked on and its exact state`;
 
     case "ultraplanning":
       return `${docRef}
-## Active Workflow: Milestone Planning
-The session is in milestone-planning mode. Your summary MUST emphasize:
+## Active Workflow: Agentic Milestone Planning
+The session is in agentic-milestone-planning mode. Your summary MUST emphasize:
 - Which reviewers have completed and their key findings
 - The state of the milestone DAG (complete, in-progress)
 - Trade-off decisions made with the user`;

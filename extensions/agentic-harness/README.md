@@ -7,7 +7,7 @@ The agent dynamically generates questions, selects reviewers, and drives workflo
 ## Features
 
 - **`/clarify`**: The agent asks dynamic, context-aware questions one at a time to resolve ambiguity. It generates questions and choices on the fly based on your request, while exploring the codebase in parallel. Ends with a structured Context Brief.
-- **`/plan`**: Delegates to the agent in strict plan-crafting mode, ensuring executable implementation plans with no placeholders.
+- **`/plan`**: Delegates to the agent in strict agentic-plan-crafting mode, ensuring executable implementation plans with no placeholders.
 - **`/ultraplan`**: The agent dynamically decides which reviewer perspectives are needed for your specific problem, dispatches them in parallel, and synthesizes findings into a milestone DAG.
 - **`/ask`**: Manual test command for the `ask_user_question` tool.
 - **`/reset-phase`**: Resets the workflow phase to idle (useful if you want to exit clarify/plan/ultraplan mode manually).
@@ -18,7 +18,7 @@ The agent dynamically generates questions, selects reviewers, and drives workflo
 The extension uses three key mechanisms:
 
 1. **`ask_user_question` tool** with `promptGuidelines` — the agent decides when and what to ask, generating questions and choices dynamically.
-2. **`resources_discover` event** — automatically registers `~/engineering-discipline/skills/` so the agent has access to clarification, plan-crafting, and milestone-planning skill rules.
+2. **`resources_discover` event** — automatically registers `~/engineering-discipline/skills/` so the agent has access to agentic-clarification, agentic-plan-crafting, and agentic-milestone-planning skill rules.
    - Compatibility mode (default): discovered skills are merged with existing skill sources.
    - If duplicate skill names exist, the first discovered skill is kept (extension-first override is not guaranteed).
 3. **`before_agent_start` event** — injects workflow phase guidance into the system prompt so the agent stays on track during `/clarify`, `/plan`, or `/ultraplan` sessions.
