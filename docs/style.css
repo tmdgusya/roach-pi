@@ -1,0 +1,544 @@
+/* ============================================
+   ROACH PI — Neo-Brutalist Design System
+   ============================================ */
+
+/* --- Reset & Base --- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --black: #000000;
+  --white: #FFFFFF;
+  --blue: #0000FF;
+  --gray-light: #F5F5F5;
+  --gray: #CCCCCC;
+  --border: 6px solid var(--black);
+  --border-thick: 8px solid var(--black);
+  --shadow: 6px 6px 0 var(--black);
+  --shadow-sm: 4px 4px 0 var(--black);
+  --shadow-lg: 8px 8px 0 var(--black);
+  --font: 'MiSans', sans-serif;
+  --max-width: 960px;
+  --radius: 0px;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-size: 16px;
+}
+
+body {
+  font-family: var(--font);
+  background-color: var(--white);
+  color: var(--black);
+  line-height: 1.7;
+  min-height: 100vh;
+}
+
+/* --- MiSans Font Import --- */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap');
+
+/* Fallback stack: MiSans is loaded by the HTML <link>; Noto Sans KR as fallback */
+body {
+  font-family: 'MiSans', 'Noto Sans KR', sans-serif;
+}
+
+/* --- Layout --- */
+.container {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+.section {
+  padding: 3rem 0;
+  border-bottom: 3px solid var(--black);
+}
+
+.section:last-of-type {
+  border-bottom: none;
+}
+
+/* --- Typography --- */
+h1, h2, h3, h4 {
+  font-weight: 900;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+}
+
+h1 {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+h2 {
+  font-size: 2rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 4px solid var(--black);
+  display: inline-block;
+}
+
+h3 {
+  font-size: 1.4rem;
+  margin-bottom: 1rem;
+}
+
+p {
+  margin-bottom: 1rem;
+}
+
+a {
+  color: var(--black);
+  text-decoration: none;
+  border-bottom: 3px solid var(--blue);
+  transition: border-color 0.1s;
+}
+
+a:hover {
+  border-bottom-color: var(--black);
+}
+
+strong {
+  font-weight: 900;
+}
+
+/* --- Neo-Brutalist Components --- */
+
+.card {
+  background: var(--white);
+  border: var(--border);
+  box-shadow: var(--shadow);
+  padding: 1.5rem;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.card-blue {
+  border-color: var(--blue);
+  box-shadow: 6px 6px 0 var(--blue);
+}
+
+.badge {
+  display: inline-block;
+  background: var(--black);
+  color: var(--white);
+  padding: 0.25rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border: none;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-blue {
+  background: var(--blue);
+  color: var(--white);
+}
+
+.btn {
+  display: inline-block;
+  background: var(--black);
+  color: var(--white);
+  border: var(--border);
+  box-shadow: var(--shadow-sm);
+  padding: 0.75rem 1.5rem;
+  font-family: var(--font);
+  font-size: 1rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-decoration: none;
+  letter-spacing: 0.03em;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.btn:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--shadow);
+  border-bottom-color: var(--black);
+}
+
+.btn-blue {
+  background: var(--blue);
+  box-shadow: 4px 4px 0 var(--black);
+}
+
+.btn-blue:hover {
+  box-shadow: 6px 6px 0 var(--black);
+}
+
+/* --- Code Blocks --- */
+pre {
+  background: var(--black);
+  color: var(--white);
+  padding: 1.25rem 1.5rem;
+  overflow-x: auto;
+  border: var(--border);
+  box-shadow: var(--shadow-sm);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin: 1rem 0;
+}
+
+code {
+  font-family: 'Courier New', Courier, monospace;
+}
+
+p code, li code {
+  background: var(--gray-light);
+  border: 2px solid var(--black);
+  padding: 0.1rem 0.4rem;
+  font-size: 0.85em;
+}
+
+/* --- ASCII Icons --- */
+.icon {
+  font-family: monospace;
+  font-size: 1.2em;
+  margin-right: 0.5rem;
+  display: inline-block;
+}
+
+/* --- Grid System --- */
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1.5rem;
+}
+
+/* --- Hero Section --- */
+.hero {
+  padding: 4rem 0 3rem;
+  text-align: center;
+  border-bottom: 4px solid var(--black);
+}
+
+.hero-ascii {
+  font-family: 'Courier New', monospace;
+  font-size: 0.7rem;
+  line-height: 1.1;
+  white-space: pre;
+  display: inline-block;
+  text-align: left;
+  margin-bottom: 2rem;
+  color: var(--black);
+}
+
+.hero-subtitle {
+  font-size: 1.2rem;
+  font-weight: 400;
+  margin-bottom: 2rem;
+  color: var(--black);
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.hero-install {
+  margin-top: 2rem;
+}
+
+/* --- Language Toggle --- */
+.lang-toggle {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 100;
+  display: flex;
+  gap: 0;
+  border: var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.lang-toggle button {
+  background: var(--white);
+  border: none;
+  border-right: 3px solid var(--black);
+  padding: 0.4rem 0.8rem;
+  font-family: var(--font);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: background 0.1s;
+}
+
+.lang-toggle button:last-child {
+  border-right: none;
+}
+
+.lang-toggle button.active {
+  background: var(--black);
+  color: var(--white);
+}
+
+.lang-toggle button:hover:not(.active) {
+  background: var(--gray-light);
+}
+
+/* Language content switching */
+[data-lang="ko"] {
+  display: none;
+}
+
+body.lang-ko [data-lang="en"] {
+  display: none;
+}
+
+body.lang-ko [data-lang="ko"] {
+  display: block;
+}
+
+body.lang-ko [data-lang="ko-inline"] {
+  display: inline;
+}
+
+/* Keep inline elements working */
+[data-lang="ko-inline"] {
+  display: none;
+}
+
+body.lang-ko [data-lang="ko-inline"] {
+  display: inline;
+}
+
+/* --- Feature Cards --- */
+.feature-icon {
+  font-size: 2rem;
+  margin-bottom: 0.75rem;
+  display: block;
+}
+
+.feature-title {
+  font-weight: 900;
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+}
+
+.feature-desc {
+  font-size: 0.95rem;
+  color: var(--black);
+  line-height: 1.6;
+}
+
+/* --- FAQ Accordion --- */
+details {
+  border: var(--border);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 1rem;
+  background: var(--white);
+}
+
+details[open] {
+  box-shadow: var(--shadow);
+}
+
+summary {
+  padding: 1rem 1.5rem;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 1rem;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+summary::before {
+  content: '▶';
+  font-family: monospace;
+  transition: transform 0.2s;
+}
+
+details[open] summary::before {
+  transform: rotate(90deg);
+}
+
+details .faq-body {
+  padding: 0 1.5rem 1.5rem;
+  line-height: 1.7;
+}
+
+/* --- Step List (Quick Start) --- */
+.step-list {
+  list-style: none;
+  counter-reset: step;
+}
+
+.step-list li {
+  counter-increment: step;
+  padding: 1.5rem;
+  border: var(--border);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 1.5rem;
+  position: relative;
+  padding-left: 4rem;
+}
+
+.step-list li::before {
+  content: counter(step);
+  position: absolute;
+  left: -0.5rem;
+  top: -0.5rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  background: var(--black);
+  color: var(--white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 1.2rem;
+  border: 3px solid var(--black);
+}
+
+/* --- Navigation --- */
+nav {
+  position: sticky;
+  top: 0;
+  background: var(--white);
+  border-bottom: var(--border-thick);
+  z-index: 50;
+  padding: 0.75rem 0;
+}
+
+nav ul {
+  display: flex;
+  gap: 1.5rem;
+  list-style: none;
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  flex-wrap: wrap;
+}
+
+nav a {
+  font-weight: 700;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  border-bottom: none;
+  padding: 0.25rem 0;
+  position: relative;
+}
+
+nav a::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  height: 3px;
+  background: var(--blue);
+  transition: width 0.15s;
+}
+
+nav a:hover::after {
+  width: 100%;
+}
+
+/* --- Footer --- */
+footer {
+  border-top: var(--border-thick);
+  padding: 2rem 1.5rem;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  margin-top: 2rem;
+}
+
+footer a {
+  border-bottom: 3px solid var(--blue);
+}
+
+/* --- Responsive --- */
+@media (max-width: 768px) {
+  :root {
+    --border: 4px solid var(--black);
+    --border-thick: 6px solid var(--black);
+    --shadow: 4px 4px 0 var(--black);
+    --shadow-sm: 3px 3px 0 var(--black);
+    --shadow-lg: 6px 6px 0 var(--black);
+  }
+
+  h1 {
+    font-size: 2rem;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+  }
+
+  .grid-2, .grid-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .hero {
+    padding: 2.5rem 0 2rem;
+  }
+
+  .hero-ascii {
+    font-size: 0.45rem;
+  }
+
+  nav ul {
+    gap: 1rem;
+  }
+
+  nav a {
+    font-size: 0.8rem;
+  }
+
+  .lang-toggle {
+    position: static;
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  html {
+    font-size: 14px;
+  }
+
+  .hero-ascii {
+    font-size: 0.35rem;
+  }
+
+  .step-list li {
+    padding-left: 3.5rem;
+  }
+}
+
+/* --- Print --- */
+@media print {
+  .lang-toggle, nav {
+    display: none;
+  }
+
+  .card, details {
+    box-shadow: none;
+    break-inside: avoid;
+  }
+}
