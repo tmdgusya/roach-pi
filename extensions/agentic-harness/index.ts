@@ -19,13 +19,6 @@ import { convertToLlm, serializeConversation } from "@mariozechner/pi-coding-age
 import { complete } from "@mariozechner/pi-ai";
 import { isDisciplineAgent, augmentAgentWithKarpathy, getSlopCleanerTask } from "./discipline.js";
 
-// ============================================================
-// Workflow State
-// ============================================================
-// Tracks which phase the agent is in so before_agent_start
-// can inject appropriate guidance into the system prompt.
-// ============================================================
-
 type WorkflowPhase =
   | "idle"
   | "clarifying"
@@ -48,13 +41,6 @@ export default function (pi: ExtensionAPI) {
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const BUNDLED_AGENTS_DIR = join(__dirname, "agents");
   const BUNDLED_SKILLS_DIR = join(__dirname, "skills");
-
-  // ============================================================
-  // ask_user_question Tool
-  // ============================================================
-  // The agent calls this autonomously when it encounters ambiguity.
-  // The agent generates the question text and choices dynamically.
-  // ============================================================
 
   const DIRECT_INPUT_OPTION = "직접 입력하기";
 
@@ -402,19 +388,11 @@ export default function (pi: ExtensionAPI) {
     });
   }
 
-  // ============================================================
-  // resources_discover: Register bundled skills
-  // ============================================================
-
   pi.on("resources_discover", async (_event, _ctx) => {
     return {
       skillPaths: [BUNDLED_SKILLS_DIR],
     };
   });
-
-  // ============================================================
-  // before_agent_start: Inject workflow phase guidance
-  // ============================================================
 
   const PHASE_GUIDANCE: Record<WorkflowPhase, string> = {
     idle: "",
@@ -709,10 +687,6 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  // ============================================================
-  // /reset-phase — reset workflow phase to idle
-  // ============================================================
-
   pi.registerCommand("reset-phase", {
     description: "Reset the workflow phase to idle (clears clarify/plan/ultraplan mode)",
     handler: async (_args, ctx) => {
@@ -723,14 +697,6 @@ export default function (pi: ExtensionAPI) {
       ctx.ui.notify("Workflow phase reset to idle.", "info");
     },
   });
-
-  // ============================================================
-  // Session start notification
-  // ============================================================
-
-  // ============================================================
-  // message_end: Track cache hit rate
-  // ============================================================
 
   pi.on("message_end", async (event, _ctx) => {
     const msg = event.message;

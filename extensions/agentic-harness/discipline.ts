@@ -7,19 +7,11 @@
 
 import type { AgentConfig } from "./agents.js";
 
-// ============================================================
-// Which agents receive discipline hooks
-// ============================================================
-
 const DISCIPLINE_AGENTS = new Set(["plan-worker", "worker"]);
 
 export function isDisciplineAgent(name: string): boolean {
   return DISCIPLINE_AGENTS.has(name);
 }
-
-// ============================================================
-// Karpathy Rules — injected into agent system prompt
-// ============================================================
 
 export const KARPATHY_RULES = `
 
@@ -59,10 +51,6 @@ export function augmentAgentWithKarpathy(agent: AgentConfig | undefined): AgentC
     systemPrompt: agent.systemPrompt + KARPATHY_RULES,
   };
 }
-
-// ============================================================
-// Slop Cleaner — task for post-execution cleanup agent
-// ============================================================
 
 export function getSlopCleanerTask(): string {
   return `Review the most recently changed files in this project and clean up any AI-generated code smells.

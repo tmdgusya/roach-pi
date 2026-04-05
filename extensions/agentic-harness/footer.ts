@@ -55,13 +55,11 @@ export class RoachFooter implements Component {
     const t = this.theme;
     const sep = t.fg("dim", " │ ");
 
-    // === Data ===
     const dirName = basename(this.footerCtx.cwd) || this.footerCtx.cwd;
     const branch = this.footerData.getGitBranch();
     const modelName = this.footerCtx.getModelName() ?? "no model";
     const usage = this.footerCtx.getContextUsage();
 
-    // === Line 1: dir │ branch │ model ===
     const line1Parts: string[] = [];
     line1Parts.push(t.fg("accent", dirName));
     if (branch && branch !== "detached") {
@@ -70,7 +68,6 @@ export class RoachFooter implements Component {
     line1Parts.push(t.fg("dim", modelName));
     const line1 = ` ${line1Parts.join(sep)}`;
 
-    // === Line 2: ctx bar │ cache │ tools ===
     const pct = usage?.percent ?? 0;
     const tokens = usage?.tokens ?? 0;
     const ctxK = usage ? Math.round(usage.contextWindow / 1000) : 0;
@@ -87,7 +84,6 @@ export class RoachFooter implements Component {
 
     const line2Parts = [ctxPart, cachePart];
 
-    // Active tools
     if (this.activeTools.running.size > 0) {
       const names = [...new Set(this.activeTools.running.values())];
       const count = this.activeTools.running.size;

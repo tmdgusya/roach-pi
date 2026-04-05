@@ -24,10 +24,6 @@ import {
 const COLLAPSED_LINE_COUNT = 10;
 const COLLAPSED_PARALLEL_LINE_COUNT = 5;
 
-// ---------------------------------------------------------------------------
-// Formatting helpers (exported for testing)
-// ---------------------------------------------------------------------------
-
 export function formatTokens(count: number): string {
   if (count < 1000) return count.toString();
   if (count < 10000) return `${(count / 1000).toFixed(1)}k`;
@@ -100,10 +96,6 @@ export function formatToolCall(toolName: PiToolName | string, args: Record<strin
   }
 }
 
-// ---------------------------------------------------------------------------
-// Shared rendering helpers
-// ---------------------------------------------------------------------------
-
 function splitOutputLines(text: string): string[] {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
   if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
@@ -136,10 +128,6 @@ function renderDisplayItems(items: DisplayItem[], expanded: boolean, fg: ThemeFg
   return text.trimEnd();
 }
 
-// ---------------------------------------------------------------------------
-// renderCall — shown while the tool is being invoked
-// ---------------------------------------------------------------------------
-
 export function renderCall(
   args: Record<string, any>,
   theme: Theme,
@@ -170,10 +158,6 @@ export function renderCall(
   return new Text(text, 0, 0);
 }
 
-// ---------------------------------------------------------------------------
-// renderResult — shown after the tool completes (or during streaming)
-// ---------------------------------------------------------------------------
-
 export function renderResult(
   result: { content: Array<{ type: string; text?: string }>; details?: unknown },
   expanded: boolean,
@@ -190,10 +174,6 @@ export function renderResult(
   }
   return renderParallelResult(details, expanded, theme);
 }
-
-// ---------------------------------------------------------------------------
-// Single-mode result
-// ---------------------------------------------------------------------------
 
 function renderSingleResult(
   r: SingleResult,
