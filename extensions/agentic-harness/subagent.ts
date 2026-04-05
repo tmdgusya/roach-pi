@@ -172,7 +172,7 @@ function buildPiArgs(agent: AgentConfig | undefined, systemPromptPath: string | 
 // Core Execution — returns SingleResult
 // ============================================================
 
-type OnUpdateCallback = (partial: { content: Array<{ type: "text"; text: string }>; details?: SubagentDetails }) => void;
+type OnUpdateCallback = (partial: { content: Array<{ type: "text"; text: string }>; details: SubagentDetails | undefined }) => void;
 
 export interface RunAgentOptions {
   agent: AgentConfig | undefined;

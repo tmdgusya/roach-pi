@@ -4,7 +4,7 @@
  */
 
 import * as os from "os";
-import { getMarkdownTheme } from "@mariozechner/pi-coding-agent";
+import { getMarkdownTheme, type Theme } from "@mariozechner/pi-coding-agent";
 import { Container, Markdown, Spacer, Text } from "@mariozechner/pi-tui";
 import type { Component } from "@mariozechner/pi-tui";
 import {
@@ -46,7 +46,7 @@ export function formatUsage(usage: Partial<UsageStats>, model?: string): string 
   return parts.join(" ");
 }
 
-type ThemeFg = (color: string, text: string) => string;
+type ThemeFg = (color: any, text: string) => string;
 
 function truncate(text: string, maxLen: number): string {
   return text.length > maxLen ? `${text.slice(0, maxLen)}...` : text;
@@ -141,7 +141,7 @@ function renderDisplayItems(items: DisplayItem[], expanded: boolean, fg: ThemeFg
 
 export function renderCall(
   args: Record<string, any>,
-  theme: { fg: ThemeFg; bold: (s: string) => string },
+  theme: Theme,
 ): Component {
   if (args.tasks && args.tasks.length > 0) {
     let text = theme.fg("toolTitle", theme.bold("subagent ")) + theme.fg("accent", `parallel (${args.tasks.length} tasks)`);
@@ -176,7 +176,7 @@ export function renderCall(
 export function renderResult(
   result: { content: Array<{ type: string; text?: string }>; details?: unknown },
   expanded: boolean,
-  theme: { fg: ThemeFg; bold: (s: string) => string },
+  theme: Theme,
 ): Component {
   const details = result.details as SubagentDetails | undefined;
   if (!details || details.results.length === 0) {
@@ -197,7 +197,7 @@ export function renderResult(
 function renderSingleResult(
   r: SingleResult,
   expanded: boolean,
-  theme: { fg: ThemeFg; bold: (s: string) => string },
+  theme: Theme,
 ): Component {
   const error = isResultError(r);
   const icon = statusIcon(r, theme.fg.bind(theme));
@@ -273,7 +273,7 @@ function renderSingleResult(
 function renderParallelResult(
   details: SubagentDetails,
   expanded: boolean,
-  theme: { fg: ThemeFg; bold: (s: string) => string },
+  theme: Theme,
 ): Component {
   const running = details.results.filter((r) => r.exitCode === -1).length;
   const successCount = details.results.filter((r) => isResultSuccess(r)).length;
