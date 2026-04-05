@@ -1,5 +1,5 @@
 import { readdir, readFile } from "fs/promises";
-import { join, basename, dirname } from "path";
+import { join, dirname } from "path";
 import { homedir } from "os";
 import { existsSync } from "fs";
 

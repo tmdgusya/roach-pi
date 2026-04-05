@@ -1,5 +1,4 @@
 import type { Component } from "@mariozechner/pi-tui";
-import { visibleWidth, truncateToWidth } from "@mariozechner/pi-tui";
 import type { Theme } from "@mariozechner/pi-coding-agent";
 import type { ReadonlyFooterDataProvider } from "@mariozechner/pi-coding-agent";
 import { basename } from "path";
