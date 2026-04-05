@@ -14,7 +14,6 @@
   --white: #FFFFFF;
   --blue: #0000FF;
   --gray-light: #F5F5F5;
-  --gray: #CCCCCC;
   --border: 6px solid var(--black);
   --border-thick: 8px solid var(--black);
   --shadow: 6px 6px 0 var(--black);
@@ -22,7 +21,6 @@
   --shadow-lg: 8px 8px 0 var(--black);
   --font: 'MiSans', sans-serif;
   --max-width: 960px;
-  --radius: 0px;
 }
 
 html {
@@ -31,7 +29,7 @@ html {
 }
 
 body {
-  font-family: var(--font);
+  font-family: 'MiSans', 'Noto Sans KR', sans-serif;
   background-color: var(--white);
   color: var(--black);
   line-height: 1.7;
@@ -39,13 +37,6 @@ body {
 }
 
 /* --- MiSans Font Import --- */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap');
-
-/* Fallback stack: MiSans is loaded by the HTML <link>; Noto Sans KR as fallback */
-body {
-  font-family: 'MiSans', 'Noto Sans KR', sans-serif;
-}
-
 /* --- Layout --- */
 .container {
   max-width: var(--max-width);
@@ -139,11 +130,6 @@ strong {
   letter-spacing: 0.05em;
 }
 
-.badge-blue {
-  background: var(--blue);
-  color: var(--white);
-}
-
 .btn {
   display: inline-block;
   background: var(--black);
@@ -212,12 +198,6 @@ p code, li code {
 .grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
-}
-
-.grid-3 {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
   gap: 1.5rem;
 }
 
@@ -302,19 +282,6 @@ body.lang-ko [data-lang="en"] {
 
 body.lang-ko [data-lang="ko"] {
   display: block;
-}
-
-body.lang-ko [data-lang="ko-inline"] {
-  display: inline;
-}
-
-/* Keep inline elements working */
-[data-lang="ko-inline"] {
-  display: none;
-}
-
-body.lang-ko [data-lang="ko-inline"] {
-  display: inline;
 }
 
 /* --- Feature Cards --- */
@@ -489,7 +456,7 @@ footer a {
     font-size: 1.5rem;
   }
 
-  .grid-2, .grid-3 {
+  .grid-2 {
     grid-template-columns: 1fr;
   }
 
