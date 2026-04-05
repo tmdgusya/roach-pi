@@ -89,5 +89,9 @@ npm test
 
 32 tests covering tool registration, command delegation, event handlers, ask_user_question behavior, agent discovery, subagent execution helpers, and concurrency control.
 
+## Contributing
+
+Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. **Feature proposals must be discussed on [GitHub Discussions](https://github.com/tmdgusya/roach-pi/discussions) before implementation.**
+
 ## License
 MIT
