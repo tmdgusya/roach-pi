@@ -4,7 +4,7 @@ import { homedir } from "os";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { discoverAgents } from "./agents.js";
-import { runSingleAgent, runParallel, runChain } from "./subagent.js";
+import { runSingleAgent, runParallel, runChain, mapWithConcurrencyLimit, MAX_CONCURRENCY } from "./subagent.js";
 import { loadState, updateState } from "./state.js";
 import { microcompactMessages, getCompactionPrompt, formatCompactSummary } from "./compaction.js";
 import { convertToLlm, serializeConversation } from "@mariozechner/pi-coding-agent";
@@ -223,28 +223,62 @@ export default function (pi: ExtensionAPI) {
           task: s.task,
           cwd: s.cwd,
         }));
-        const { finalResult, allResults } = await runChain(
-          steps,
-          defaultCwd,
-          signal,
-        );
 
+        ctx.ui.setStatus("harness", `Chain: 0/${chain.length} steps`);
+        const allResults: import("./subagent.js").SubagentResult[] = [];
+        let previousOutput = "";
+
+        for (let i = 0; i < steps.length; i++) {
+          const step = steps[i];
+          ctx.ui.setStatus("harness", `Chain step ${i + 1}/${chain.length}: ${chain[i].agent}`);
+          const taskWithContext = step.task.replace(/\{previous\}/g, previousOutput);
+          const result = await runSingleAgent(
+            step.agent,
+            taskWithContext,
+            step.cwd || defaultCwd,
+            signal,
+          );
+          allResults.push(result);
+
+          // Emit progress update
+          if (onUpdate) {
+            const partialSummary = allResults
+              .map((r, j) =>
+                `## Step ${j + 1}: ${chain[j].agent}\n**Status:** ${r.exitCode === 0 ? "Success" : "Failed"}\n\n${r.output}`,
+              )
+              .join("\n\n---\n\n");
+            onUpdate({
+              content: [{ type: "text" as const, text: partialSummary }],
+              details: undefined,
+            });
+          }
+
+          if (result.exitCode !== 0) {
+            ctx.ui.setStatus("harness", undefined);
+            const summary = allResults
+              .map((r, j) =>
+                `## Step ${j + 1}: ${chain[j].agent}\n**Status:** ${r.exitCode === 0 ? "Success" : "Failed"}\n\n${r.output}`,
+              )
+              .join("\n\n---\n\n");
+            return {
+              content: [{ type: "text" as const, text: `Chain failed at step ${i + 1}: ${result.error}\n\n${summary}` }],
+              details: undefined,
+            };
+          }
+
+          previousOutput = result.output;
+          ctx.ui.notify(`[subagent] Chain step ${i + 1}/${chain.length} done: ${chain[i].agent}`, "info");
+        }
+
+        ctx.ui.setStatus("harness", undefined);
         const summary = allResults
-          .map(
-            (r, i) =>
-              `## Step ${i + 1}: ${chain[i].agent}\n**Status:** ${r.exitCode === 0 ? "Success" : "Failed"}\n\n${r.output}`,
+          .map((r, i) =>
+            `## Step ${i + 1}: ${chain[i].agent}\n**Status:** ${r.exitCode === 0 ? "Success" : "Failed"}\n\n${r.output}`,
           )
           .join("\n\n---\n\n");
 
         return {
-          content: [
-            {
-              type: "text" as const,
-              text: finalResult.error
-                ? `Chain failed: ${finalResult.error}\n\n${summary}`
-                : summary,
-            },
-          ],
+          content: [{ type: "text" as const, text: summary }],
           details: undefined,
         };
       }
@@ -256,8 +290,37 @@ export default function (pi: ExtensionAPI) {
           task: t.task,
           cwd: t.cwd,
         }));
-        const results = await runParallel(taskItems, defaultCwd, signal);
 
+        const total = tasks.length;
+        let completed = 0;
+        ctx.ui.setStatus("harness", `Parallel: 0/${total} agents running...`);
+
+        const results = await mapWithConcurrencyLimit(taskItems, MAX_CONCURRENCY, async (item, index) => {
+          const result = await runSingleAgent(
+            item.agent,
+            item.task,
+            item.cwd || defaultCwd,
+            signal,
+          );
+          completed++;
+          ctx.ui.setStatus("harness", `Parallel: ${completed}/${total} agents done`);
+          ctx.ui.notify(
+            `[subagent] ${tasks[index].agent}: ${result.exitCode === 0 ? "done" : "failed"}`,
+            result.exitCode === 0 ? "info" : "warning",
+          );
+
+          // Emit progress update
+          if (onUpdate) {
+            onUpdate({
+              content: [{ type: "text" as const, text: `${completed}/${total} agents completed` }],
+              details: undefined,
+            });
+          }
+
+          return result;
+        });
+
+        ctx.ui.setStatus("harness", undefined);
         const summary = results
           .map(
             (r, i) =>
@@ -274,12 +337,14 @@ export default function (pi: ExtensionAPI) {
       // Single mode
       if (agent && task) {
         const agentConfig = findAgent(agent);
+        ctx.ui.setStatus("harness", `Running: ${agent}`);
         const result = await runSingleAgent(
           agentConfig,
           task,
           cwd || defaultCwd,
           signal,
         );
+        ctx.ui.setStatus("harness", undefined);
 
         return {
           content: [
@@ -352,6 +417,31 @@ export default function (pi: ExtensionAPI) {
     ].join("\n"),
   };
 
+  // ============================================================
+  // tool_call: Log subagent tool invocations
+  // ============================================================
+
+  pi.on("tool_call", async (event, ctx) => {
+    if (event.toolName === "subagent") {
+      const input = event.input as Record<string, unknown>;
+      const mode = input.chain
+        ? "chain"
+        : input.tasks
+          ? "parallel"
+          : "single";
+      const agentNames = input.chain
+        ? (input.chain as any[]).map((s: any) => s.agent).join(", ")
+        : input.tasks
+          ? (input.tasks as any[]).map((t: any) => t.agent).join(", ")
+          : (input.agent as string) || "unknown";
+
+      ctx.ui.notify(
+        `[subagent] mode=${mode} agents=[${agentNames}]`,
+        "info",
+      );
+    }
+  });
+
   pi.on("before_agent_start", async (event, _ctx) => {
     const guidance = PHASE_GUIDANCE[currentPhase];
     if (!guidance) return;
@@ -380,6 +470,10 @@ export default function (pi: ExtensionAPI) {
     const { messagesToSummarize, turnPrefixMessages, tokensBefore, firstKeptEntryId, previousSummary } = preparation;
 
     const model = ctx.model;
+    if (!model) {
+      ctx.ui.notify("No model available, using default compaction", "warning");
+      return;
+    }
     const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
     if (!auth.ok || !auth.apiKey) {
       ctx.ui.notify("Compaction auth failed, using default compaction", "warning");
@@ -478,6 +572,29 @@ export default function (pi: ExtensionAPI) {
       if (details.activeGoalDocument !== undefined) {
         activeGoalDocument = details.activeGoalDocument;
       }
+    }
+  });
+
+  // ============================================================
+  // tool_result: Track active goal document creation
+  // ============================================================
+
+  const GOAL_DOC_PATTERN = /^docs\/engineering-discipline\/(context|plans|reviews)\//;
+
+  pi.on("tool_result", async (event, _ctx) => {
+    if (currentPhase === "idle") return;
+
+    const toolName = event.toolName;
+    if (toolName !== "write" && toolName !== "edit") return;
+
+    // event.input contains the tool's input args; both write and edit use "path"
+    const filePath = event.input.path as string | undefined;
+    if (!filePath) return;
+
+    const relativePath = filePath.replace(/^.*?docs\/engineering-discipline\//, "docs/engineering-discipline/");
+    if (GOAL_DOC_PATTERN.test(relativePath)) {
+      activeGoalDocument = relativePath;
+      updateState(STATE_FILE, { activeGoalDocument: relativePath }).catch(() => {});
     }
   });
 
