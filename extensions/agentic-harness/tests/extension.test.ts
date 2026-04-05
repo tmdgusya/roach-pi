@@ -44,7 +44,7 @@ describe("Extension Registration", () => {
     expect(tool.name).toBe("subagent");
     expect(tool.promptSnippet).toBeDefined();
     expect(tool.promptGuidelines).toBeDefined();
-    expect(tool.promptGuidelines.length).toBe(8);
+    expect(tool.promptGuidelines.length).toBe(6);
   });
 
   it("should register all commands", () => {

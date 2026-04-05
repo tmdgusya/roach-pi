@@ -199,13 +199,11 @@ export default function (pi: ExtensionAPI) {
     promptSnippet:
       "Delegate tasks to specialized agents (single, parallel, or chain mode)",
     promptGuidelines: [
-      "Use single mode (agent + task) for one-off investigation or exploration tasks.",
-      "Use parallel mode (tasks array) to dispatch multiple independent agents concurrently, e.g. codebase reviewers.",
-      "Use chain mode (chain array) for sequential pipelines where each step uses {previous} to reference prior output.",
-      "Bundled agents: 'explorer' (codebase investigation), 'worker' (general execution), 'planner' (architecture design), 'plan-worker' (plan step execution), 'plan-validator' (independent task verification), 'plan-compliance' (pre-task precondition check).",
-      "For run-plan execution: use 'plan-compliance' for pre-task checks, 'plan-worker' for task implementation, 'plan-validator' for independent validation under information barrier.",
-      "For ultraplan reviews: use 'reviewer-feasibility', 'reviewer-architecture', 'reviewer-risk', 'reviewer-dependency', 'reviewer-user-value' in parallel mode.",
-      "If the specified agent is not found, the task runs with default pi settings.",
+      "Use single mode (agent + task) for one-off tasks. Use parallel mode (tasks array) for concurrent dispatch. Use chain mode (chain array) for sequential pipelines with {previous} placeholder.",
+      "ONLY use these exact agent names — do NOT invent or guess agent names: explorer, worker, planner, plan-worker, plan-validator, plan-compliance, reviewer-feasibility, reviewer-architecture, reviewer-risk, reviewer-dependency, reviewer-user-value.",
+      "All agents use the default model. Do NOT specify or mention specific models (no Haiku, Sonnet, etc.).",
+      "For codebase exploration: use 'explorer'. For general execution: use 'worker'. For plan execution: use 'plan-compliance' → 'plan-worker' → 'plan-validator'.",
+      "For ultraplan milestone reviews: dispatch all 5 reviewers in parallel: reviewer-feasibility, reviewer-architecture, reviewer-risk, reviewer-dependency, reviewer-user-value.",
       "Max 8 parallel tasks with 4 concurrent. Chain mode stops on first error.",
     ],
     parameters: SubagentParams,
