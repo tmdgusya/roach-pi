@@ -385,7 +385,14 @@ export default function (pi: ExtensionAPI) {
     raw: Type.Optional(
       Type.Boolean({
         description:
-          "Skip Readability extraction and convert the full HTML page to Markdown",
+          "Convert the full HTML page to Markdown without filtering",
+        default: false,
+      }),
+    ),
+    includeScripts: Type.Optional(
+      Type.Boolean({
+        description:
+          "Include <script> and <style> tag content in the output. Default: false (stripped)",
         default: false,
       }),
     ),
@@ -401,12 +408,12 @@ export default function (pi: ExtensionAPI) {
     name: "webfetch",
     label: "WebFetch",
     description:
-      "Fetch a URL and convert its HTML content to clean Markdown. Uses Mozilla Readability for article extraction when possible, with Turndown + GFM for Markdown conversion. Results are cached for 15 minutes.",
+      "Fetch a URL and convert its HTML content to clean Markdown. Uses Turndown + GFM for Markdown conversion. Results are cached for 15 minutes.",
     promptSnippet: "Fetch a URL and convert to Markdown",
     promptGuidelines: [
       "Use webfetch to retrieve and read web pages, documentation, or any URL content.",
-      "The tool automatically extracts main article content using Readability — navigation, ads, and footers are stripped.",
-      "Use raw: true when you need the full HTML page converted, not just the article content.",
+      "Script and style tags are stripped by default. Use includeScripts: true when you need CSS/JS source code.",
+      "Use raw: true when you need the full HTML page converted without any filtering.",
       "Use maxLength to limit output size for very large pages.",
       "Results are cached for 15 minutes — repeated requests for the same URL return instantly.",
     ],
@@ -417,11 +424,12 @@ export default function (pi: ExtensionAPI) {
       renderWebfetchResult(result, expanded, theme),
 
     execute: async (toolCallId, params, signal, _onUpdate, _ctx) => {
-      const { url, raw, maxLength } = params;
+      const { url, raw, maxLength, includeScripts } = params;
       try {
         const { content, details } = await fetchUrlToMarkdown(url, {
           raw,
           maxLength,
+          includeScripts,
           signal,
         });
         return {

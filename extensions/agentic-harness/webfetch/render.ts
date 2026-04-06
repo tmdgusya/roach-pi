@@ -42,6 +42,7 @@ export function renderWebfetchCall(
   let text = theme.fg("toolTitle", theme.bold("webfetch "));
   text += theme.fg("accent", hostname);
   if (args.raw) text += theme.fg("dim", " --raw");
+  if (args.includeScripts) text += theme.fg("dim", " --scripts");
   if (args.maxLength) text += theme.fg("dim", ` --max ${args.maxLength}`);
   return new Text(text, 0, 0);
 }

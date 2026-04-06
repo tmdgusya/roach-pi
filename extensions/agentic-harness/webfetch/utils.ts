@@ -33,10 +33,10 @@ function formatBytes(bytes: number): string {
 
 export async function fetchUrlToMarkdown(
   url: string,
-  options: { raw?: boolean; maxLength?: number; signal?: AbortSignal } = {},
+  options: { raw?: boolean; maxLength?: number; includeScripts?: boolean; signal?: AbortSignal } = {},
 ): Promise<{ content: string; details: WebFetchDetails }> {
   const startTime = Date.now();
-  const cacheKey = JSON.stringify({ url, mode: options.raw ? "full" : "auto" });
+  const cacheKey = JSON.stringify({ url, mode: options.raw ? "full" : "auto", scripts: !!options.includeScripts });
 
   const cached = cache.get(cacheKey);
   if (cached) {
@@ -169,7 +169,7 @@ export async function fetchUrlToMarkdown(
   }
 
   const html = new TextDecoder("utf-8").decode(htmlBuffer);
-  const turndown = await getTurndownService();
+  const turndown = await getTurndownService(options.includeScripts ? [] : ["script", "style"]);
   const markdown = stripNoise(turndown.turndown(html));
 
   const entry: CacheEntry = {

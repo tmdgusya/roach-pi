@@ -1,9 +1,15 @@
 import type TurndownService from "turndown";
 
-let turndownPromise: Promise<TurndownService> | undefined;
+const cache = new Map<string, Promise<TurndownService>>();
 
-export async function getTurndownService(): Promise<TurndownService> {
-  return (turndownPromise ??= (async () => {
+export async function getTurndownService(
+  removeTags: string[] = ["script", "style"],
+): Promise<TurndownService> {
+  const key = removeTags.join(",");
+  const cached = cache.get(key);
+  if (cached) return cached;
+
+  const promise = (async () => {
     const [turndownMod, gfmMod] = await Promise.all([
       import("turndown"),
       // @ts-expect-error no type declarations for turndown-plugin-gfm
@@ -26,8 +32,13 @@ export async function getTurndownService(): Promise<TurndownService> {
     });
 
     service.use(gfm);
-    service.remove(["script", "style"]);
+    if (removeTags.length > 0) {
+      service.remove(removeTags);
+    }
 
     return service;
-  })());
+  })();
+
+  cache.set(key, promise);
+  return promise;
 }

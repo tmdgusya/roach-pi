@@ -69,4 +69,22 @@ describe("getTurndownService", () => {
     const b = await getTurndownService();
     expect(a).toBe(b);
   });
+
+  it("should include script/style content when removeTags is empty", async () => {
+    const service = await getTurndownService([]);
+    const html =
+      "<p>Content</p><script>alert('xss')</script><style>.x{color:red}</style>";
+    const md = service.turndown(html);
+    expect(md).toContain("Content");
+    expect(md).toContain("alert('xss')");
+    expect(md).toContain(".x{color:red}");
+  });
+
+  it("should use default removeTags when called without arguments", async () => {
+    const service = await getTurndownService();
+    const html = "<p>Content</p><script>alert('xss')</script>";
+    const md = service.turndown(html);
+    expect(md).toContain("Content");
+    expect(md).not.toContain("alert");
+  });
 });

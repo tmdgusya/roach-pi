@@ -66,6 +66,33 @@ describe("fetchUrlToMarkdown", () => {
     expect(result.content).toContain("Title");
   });
 
+  it("should include script/style when includeScripts is true", async () => {
+    mockFetch.mockResolvedValue(
+      mockHtmlResponse(
+        "<html><body><p>Content</p><script>alert('hi')</script><style>.x{}</style></body></html>",
+      ),
+    );
+
+    const result = await fetchUrlToMarkdown("https://example.com", {
+      includeScripts: true,
+    });
+    expect(result.content).toContain("Content");
+    expect(result.content).toContain("alert('hi')");
+    expect(result.content).toContain(".x{}");
+  });
+
+  it("should exclude script/style by default", async () => {
+    mockFetch.mockResolvedValue(
+      mockHtmlResponse(
+        "<html><body><p>Content</p><script>alert('hi')</script></body></html>",
+      ),
+    );
+
+    const result = await fetchUrlToMarkdown("https://example.com");
+    expect(result.content).toContain("Content");
+    expect(result.content).not.toContain("alert");
+  });
+
   it("should return cached result on second request for the same mode", async () => {
     mockFetch.mockResolvedValue(
       mockHtmlResponse("<html><body><h1>Cached</h1></body></html>"),
