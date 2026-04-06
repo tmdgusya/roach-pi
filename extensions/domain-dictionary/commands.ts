@@ -54,7 +54,7 @@ export function registerDictCommands(pi: ExtensionAPI, cwd: string): void {
         const summary = entries
           .map(e => `  ${e.domain} — ${e.commitCount} commits, ${e.files.length} files`)
           .join('\n');
-        console.log(`\nDomain Dictionary (${entries.length} domains):\n${summary}\n`);
+        console.log(`\nDomain Dictionary (${entries.length} domains):\n${summary}\n\n`);
         return;
       }
 
@@ -65,7 +65,7 @@ export function registerDictCommands(pi: ExtensionAPI, cwd: string): void {
       }
 
       const results = dict.search(query);
-      console.log(formatResults(results));
+      console.log(formatResults(results) + '\n');
     },
   });
 
@@ -88,10 +88,11 @@ export function registerDictCommands(pi: ExtensionAPI, cwd: string): void {
           .slice(0, 5)
           .map(e => `  ${e.domain} — ${e.commitCount} commits, ${e.files.length} files`)
           .join('\n');
-        console.log(`\nTop domains:\n${summary}`);
+        let output = `\nTop domains:\n${summary}`;
         if (entries.length > 5) {
-          console.log(`  ... and ${entries.length - 5} more. Use /dict to browse.\n`);
+          output += `\n  ... and ${entries.length - 5} more. Use /dict to browse.`;
         }
+        console.log(output + '\n\n');
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         ctx.ui.notify(`Build failed: ${msg}`, 'error');
