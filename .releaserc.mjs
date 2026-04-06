@@ -46,6 +46,13 @@ export default {
       "@semantic-release/npm",
       {
         npmPublish: false,
+        pkgRoot: "extensions/agentic-harness",
+      },
+    ],
+    [
+      "@semantic-release/npm",
+      {
+        npmPublish: false,
       },
     ],
     "@semantic-release/github",
