@@ -6,9 +6,9 @@ function formatResults(results: QueryResult[]): string {
   if (results.length === 0) return 'No matching domains found.';
 
   const lines: string[] = [];
-
+  lines.push('');
   for (const r of results) {
-    lines.push(`\n📦 ${r.domain} (${r.commitCount} commits)`);
+    lines.push(`${r.domain} (${r.commitCount} commits)`);
     lines.push('  Files:');
     for (const f of r.files.slice(0, 10)) {
       lines.push(`    ${f.path} (${f.changeCount} changes)`);
@@ -16,10 +16,13 @@ function formatResults(results: QueryResult[]): string {
     if (r.files.length > 10) {
       lines.push(`    ... and ${r.files.length - 10} more`);
     }
+    lines.push('');
   }
 
   return lines.join('\n');
 }
+
+
 
 export function registerDictCommands(pi: ExtensionAPI, cwd: string): void {
   const dictPath = Dictionary.defaultPath(cwd);
@@ -52,13 +55,9 @@ export function registerDictCommands(pi: ExtensionAPI, cwd: string): void {
         }
         const entries = dict.load();
         const summary = entries
-          .map(e => `  ${e.domain} — ${e.commitCount} commits, ${e.files.length} files`)
-          .join('\n');
-        // eslint-disable-next-line no-console
-        console.log(`\nDomain Dictionary (${entries.length} domains):\n${summary}`);
-        // Force terminal flush with extra newlines to prevent input overlap
-        // eslint-disable-next-line no-console
-        console.log('\n\n');
+          .map(e => `${e.domain}: ${e.commitCount} commits, ${e.files.length} files`)
+          .join(' | ');
+        ctx.ui.notify(`Dictionary (${entries.length} domains): ${summary}`, 'info');
         return;
       }
 
@@ -69,11 +68,13 @@ export function registerDictCommands(pi: ExtensionAPI, cwd: string): void {
       }
 
       const results = dict.search(query);
-      // eslint-disable-next-line no-console
-      console.log(formatResults(results));
-      // Force terminal flush with extra newlines
-      // eslint-disable-next-line no-console
-      console.log('\n\n');
+      if (results.length === 0) {
+        ctx.ui.notify('No matching domains found.', 'warning');
+      } else {
+        // Use setWidget to display results properly
+        const output = formatResults(results).split('\n');
+        ctx.ui.setWidget('dict-results', output, { placement: 'belowEditor' });
+      }
     },
   });
 
@@ -94,17 +95,10 @@ export function registerDictCommands(pi: ExtensionAPI, cwd: string): void {
 
         const summary = entries
           .slice(0, 5)
-          .map(e => `  ${e.domain} — ${e.commitCount} commits, ${e.files.length} files`)
-          .join('\n');
-        let output = `\nTop domains:\n${summary}`;
-        if (entries.length > 5) {
-          output += `\n  ... and ${entries.length - 5} more. Use /dict to browse.`;
-        }
-        // eslint-disable-next-line no-console  
-        console.log(output);
-        // Force terminal flush with extra newlines to prevent input overlap bug
-        // eslint-disable-next-line no-console
-        console.log('\n\n');
+          .map(e => `${e.domain}: ${e.commitCount} commits`)
+          .join(' | ');
+        const more = entries.length > 5 ? ` (+${entries.length - 5} more)` : '';
+        ctx.ui.notify(`Top: ${summary}${more}`, 'info');
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         ctx.ui.notify(`Build failed: ${msg}`, 'error');
