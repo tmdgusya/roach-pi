@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0](https://github.com/tmdgusya/roach-pi/compare/v1.1.0...v1.2.0) (2026-04-06)
+
+### Features
+
+* **webfetch:** add core fetch + convert pipeline with caching ([61c3e4f](https://github.com/tmdgusya/roach-pi/commit/61c3e4f9c57d63c38649e60791c7c98a12a57983))
+* **webfetch:** add custom TUI rendering for fetch status and results ([0fb2d65](https://github.com/tmdgusya/roach-pi/commit/0fb2d6583d9addf1df1bb95d6efb1f8d57fad52a))
+* **webfetch:** add dependencies and shared types ([d63dea6](https://github.com/tmdgusya/roach-pi/commit/d63dea6e5c478e6b7d0456fad7363c8340787931))
+* **webfetch:** add lazy Turndown + GFM service ([32f809c](https://github.com/tmdgusya/roach-pi/commit/32f809c925d2ff429c5fdafd04319133f35278e1))
+* **webfetch:** add LRU cache with TTL eviction ([e3b1364](https://github.com/tmdgusya/roach-pi/commit/e3b13649ac7eddb2b74bdaac7bc9c74ce26a178b))
+* **webfetch:** add Readability content extraction with dynamic imports ([e22f13f](https://github.com/tmdgusya/roach-pi/commit/e22f13fb786214255a6ccf147875976510b8ed23))
+* **webfetch:** register webfetch tool in agentic-harness extension ([edf3226](https://github.com/tmdgusya/roach-pi/commit/edf322688f1acf14a78e206f7e94978d6b7fcc36))
+
+### Bug Fixes
+
+* **webfetch:** resolve TypeScript type declaration errors ([7981a61](https://github.com/tmdgusya/roach-pi/commit/7981a6148f89d6190aab29b00e7071a10e4e3da4))
+
+### Documentation
+
+* **webfetch:** add review document and clean up residual comments ([2d97ccf](https://github.com/tmdgusya/roach-pi/commit/2d97ccfa6c81e1f35481b79e4883bb73a3803893))
+
+### Miscellaneous
+
+* **release:** v1.2.0 ([501193e](https://github.com/tmdgusya/roach-pi/commit/501193e80d75fa4511e5f08a28a80e52c8a241d0))
+
 ## [1.1.0](https://github.com/tmdgusya/roach-pi/compare/v1.0.1...v1.1.0) (2026-04-06)
 
 ### Features
