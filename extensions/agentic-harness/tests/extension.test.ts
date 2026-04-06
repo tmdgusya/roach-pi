@@ -297,3 +297,31 @@ describe("Validator Information Barrier", () => {
     expect(guidelines.some((g: string) => g.includes("planFile") && g.includes("planTaskId"))).toBe(true);
   });
 });
+
+describe("webfetch Tool", () => {
+  it("should register webfetch tool", () => {
+    const { mockPi, tools } = createMockPi();
+    extension(mockPi);
+
+    const tool = tools.get("webfetch");
+    expect(tool).toBeDefined();
+    expect(tool.name).toBe("webfetch");
+    expect(tool.promptSnippet).toBeDefined();
+    expect(tool.promptGuidelines).toBeDefined();
+    expect(tool.promptGuidelines.length).toBeGreaterThan(0);
+    expect(tool.renderCall).toBeTypeOf("function");
+    expect(tool.renderResult).toBeTypeOf("function");
+  });
+
+  it("should have url as required parameter in schema", () => {
+    const { mockPi, tools } = createMockPi();
+    extension(mockPi);
+
+    const tool = tools.get("webfetch");
+    const schema = tool.parameters;
+    expect(schema.properties.url).toBeDefined();
+    expect(schema.properties.raw).toBeDefined();
+    expect(schema.properties.maxLength).toBeDefined();
+    expect(schema.required).toContain("url");
+  });
+});;
