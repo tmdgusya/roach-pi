@@ -18,6 +18,8 @@ import { microcompactMessages, getCompactionPrompt, formatCompactSummary } from 
 import { convertToLlm, serializeConversation } from "@mariozechner/pi-coding-agent";
 import { complete } from "@mariozechner/pi-ai";
 import { isDisciplineAgent, augmentAgentWithKarpathy, getSlopCleanerTask } from "./discipline.js";
+import { fetchUrlToMarkdown } from "./webfetch/utils.js";
+import { renderWebfetchCall, renderWebfetchResult } from "./webfetch/render.js";
 
 type WorkflowPhase =
   | "idle"
@@ -375,6 +377,73 @@ export default function (pi: ExtensionAPI) {
       },
     });
   }
+
+  const WebFetchParams = Type.Object({
+    url: Type.String({
+      description: "The URL to fetch and convert to Markdown",
+    }),
+    raw: Type.Optional(
+      Type.Boolean({
+        description:
+          "Skip Readability extraction and convert the full HTML page to Markdown",
+        default: false,
+      }),
+    ),
+    maxLength: Type.Optional(
+      Type.Number({
+        description:
+          "Maximum number of characters to return. Content beyond this limit is truncated.",
+      }),
+    ),
+  });
+
+  pi.registerTool({
+    name: "webfetch",
+    label: "WebFetch",
+    description:
+      "Fetch a URL and convert its HTML content to clean Markdown. Uses Mozilla Readability for article extraction when possible, with Turndown + GFM for Markdown conversion. Results are cached for 15 minutes.",
+    promptSnippet: "Fetch a URL and convert to Markdown",
+    promptGuidelines: [
+      "Use webfetch to retrieve and read web pages, documentation, or any URL content.",
+      "The tool automatically extracts main article content using Readability — navigation, ads, and footers are stripped.",
+      "Use raw: true when you need the full HTML page converted, not just the article content.",
+      "Use maxLength to limit output size for very large pages.",
+      "Results are cached for 15 minutes — repeated requests for the same URL return instantly.",
+    ],
+    parameters: WebFetchParams,
+
+    renderCall: (args, theme) => renderWebfetchCall(args, theme),
+    renderResult: (result, { expanded }, theme) =>
+      renderWebfetchResult(result, expanded, theme),
+
+    execute: async (toolCallId, params, signal, _onUpdate, _ctx) => {
+      const { url, raw, maxLength } = params;
+      try {
+        const { content, details } = await fetchUrlToMarkdown(url, {
+          raw,
+          maxLength,
+          signal,
+        });
+        return {
+          content: [{ type: "text" as const, text: content }],
+          details,
+        };
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : String(err);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Error fetching ${url}: ${message}`,
+            },
+          ],
+          details: undefined,
+          isError: true,
+        };
+      }
+    },
+  });
 
   pi.on("resources_discover", async (_event, _ctx) => {
     return {
