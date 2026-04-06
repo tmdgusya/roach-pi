@@ -54,7 +54,11 @@ export function registerDictCommands(pi: ExtensionAPI, cwd: string): void {
         const summary = entries
           .map(e => `  ${e.domain} — ${e.commitCount} commits, ${e.files.length} files`)
           .join('\n');
-        console.log(`\nDomain Dictionary (${entries.length} domains):\n${summary}\n\n`);
+        // eslint-disable-next-line no-console
+        console.log(`\nDomain Dictionary (${entries.length} domains):\n${summary}`);
+        // Force terminal flush with extra newlines to prevent input overlap
+        // eslint-disable-next-line no-console
+        console.log('\n\n');
         return;
       }
 
@@ -65,7 +69,11 @@ export function registerDictCommands(pi: ExtensionAPI, cwd: string): void {
       }
 
       const results = dict.search(query);
-      console.log(formatResults(results) + '\n');
+      // eslint-disable-next-line no-console
+      console.log(formatResults(results));
+      // Force terminal flush with extra newlines
+      // eslint-disable-next-line no-console
+      console.log('\n\n');
     },
   });
 
@@ -92,7 +100,11 @@ export function registerDictCommands(pi: ExtensionAPI, cwd: string): void {
         if (entries.length > 5) {
           output += `\n  ... and ${entries.length - 5} more. Use /dict to browse.`;
         }
-        console.log(output + '\n\n');
+        // eslint-disable-next-line no-console  
+        console.log(output);
+        // Force terminal flush with extra newlines to prevent input overlap bug
+        // eslint-disable-next-line no-console
+        console.log('\n\n');
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         ctx.ui.notify(`Build failed: ${msg}`, 'error');
