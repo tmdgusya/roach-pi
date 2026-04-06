@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0](https://github.com/tmdgusya/roach-pi/compare/v1.2.1...v1.3.0) (2026-04-06)
+
+### Features
+
+* add includeScripts option to webfetch tool ([e802b82](https://github.com/tmdgusya/roach-pi/commit/e802b824861010bd42bf0a5dd330e06825f61595))
+
 ## [1.2.1](https://github.com/tmdgusya/roach-pi/compare/v1.2.0...v1.2.1) (2026-04-06)
 
 ### Bug Fixes
