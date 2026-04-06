@@ -1,8 +1,4 @@
 // runner-cli.ts
-/**
- * Helpers for inheriting selected parent CLI flags in child subagent processes.
- */
-
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";

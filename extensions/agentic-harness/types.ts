@@ -1,7 +1,4 @@
 // types.ts
-/**
- * Shared type definitions for the subagent system.
- */
 
 /** Aggregated token usage from a subagent run. */
 export interface UsageStats {

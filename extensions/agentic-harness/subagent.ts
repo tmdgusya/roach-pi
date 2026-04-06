@@ -1,9 +1,4 @@
 // subagent.ts
-/**
- * Subagent process runner.
- * Spawns isolated `pi` processes and streams results back via callbacks.
- */
-
 import { spawn } from "child_process";
 import { writeFile, unlink } from "fs/promises";
 import { tmpdir } from "os";
@@ -16,18 +11,10 @@ import { emptyUsage, getFinalOutput } from "./types.js";
 import { processPiJsonLine } from "./runner-events.js";
 import { getInheritedCliArgs } from "./runner-cli.js";
 
-// ============================================================
-// Constants
-// ============================================================
-
 export const MAX_PARALLEL_TASKS = 8;
 export const MAX_CONCURRENCY = 4;
 const KILL_TIMEOUT_MS = 5000;
 const AGENT_END_GRACE_MS = 250;
-
-// ============================================================
-// Environment-based safety guards
-// ============================================================
 
 const SUBAGENT_DEPTH_ENV = "PI_SUBAGENT_DEPTH";
 const SUBAGENT_MAX_DEPTH_ENV = "PI_SUBAGENT_MAX_DEPTH";
@@ -70,10 +57,6 @@ export function getCycleViolations(requested: string[], stack: string[]): string
   const stackSet = new Set(stack);
   return requested.filter((name) => stackSet.has(name));
 }
-
-// ============================================================
-// Helpers
-// ============================================================
 
 export function getPiInvocation(): { command: string; args: string[] } {
   const mainScript = process.argv[1];
@@ -125,20 +108,12 @@ export async function mapWithConcurrencyLimit<TIn, TOut>(
   return results;
 }
 
-// ============================================================
-// Temp file
-// ============================================================
-
 async function writeTempSystemPrompt(content: string): Promise<string> {
   const filename = `pi-subagent-${randomBytes(8).toString("hex")}.md`;
   const filepath = join(tmpdir(), filename);
   await writeFile(filepath, content, "utf-8");
   return filepath;
 }
-
-// ============================================================
-// Build CLI args
-// ============================================================
 
 function buildPiArgs(agent: AgentConfig | undefined, systemPromptPath: string | null, task: string): string[] {
   const inherited = getInheritedCliArgs();
@@ -167,10 +142,6 @@ function buildPiArgs(agent: AgentConfig | undefined, systemPromptPath: string | 
   args.push(`Task: ${task}`);
   return args;
 }
-
-// ============================================================
-// Core Execution — returns SingleResult
-// ============================================================
 
 type OnUpdateCallback = (partial: { content: Array<{ type: "text"; text: string }>; details: SubagentDetails | undefined }) => void;
 

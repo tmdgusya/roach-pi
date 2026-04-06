@@ -1,11 +1,4 @@
 // validator-template.ts
-/**
- * Builds the fixed validator prompt from parsed plan task data.
- *
- * This template is the code-enforced information barrier:
- * the validator receives ONLY plan-derived data, never worker output.
- */
-
 import type { PlanTask } from "./plan-parser.js";
 
 export function buildValidatorPrompt(

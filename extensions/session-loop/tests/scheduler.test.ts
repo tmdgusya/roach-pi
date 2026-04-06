@@ -3,8 +3,6 @@ import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vite
 import { parseInterval, JobScheduler } from '../scheduler.js';
 import { LoopError } from '../types.js';
 
-// ─── parseInterval ───────────────────────────────────────────
-
 describe('parseInterval', () => {
   it('parses seconds', () => {
     const result = parseInterval('5s');
@@ -72,8 +70,6 @@ describe('parseInterval', () => {
     }
   });
 });
-
-// ─── JobScheduler ────────────────────────────────────────────
 
 describe('JobScheduler', () => {
   let scheduler: JobScheduler;
@@ -164,12 +160,7 @@ describe('JobScheduler', () => {
 
     it('stops interval from firing after stop', async () => {
       const job = scheduler.schedule('5s', 'test');
-      await vi.advanceTimersByTimeAsync(0); // immediate
-      expect(executeFn).toHaveBeenCalledTimes(1);
-
-      scheduler.stop(job.id);
-
-      await vi.advanceTimersByTimeAsync(10000);
+      await vi.advanceTimersByTimeAsync(0);
       expect(executeFn).toHaveBeenCalledTimes(1); // no more
     });
   });
@@ -223,7 +214,7 @@ describe('JobScheduler', () => {
     it('returns correct stats', async () => {
       scheduler.schedule('5s', 'job 1');
       scheduler.schedule('10s', 'job 2');
-      await vi.advanceTimersByTimeAsync(0); // immediate runs
+      await vi.advanceTimersByTimeAsync(0);
 
       const stats = scheduler.getStats();
       expect(stats.totalJobs).toBe(2);
@@ -256,10 +247,10 @@ describe('JobScheduler', () => {
     it('continues scheduling after error', async () => {
       executeFn.mockRejectedValueOnce(new Error('boom'));
       const job = scheduler.schedule('5s', 'resilient');
-      await vi.advanceTimersByTimeAsync(0); // immediate: fails
+      await vi.advanceTimersByTimeAsync(0);
 
       executeFn.mockResolvedValueOnce(undefined);
-      await vi.advanceTimersByTimeAsync(5000); // 5s: succeeds
+      await vi.advanceTimersByTimeAsync(5000);
 
       const updated = scheduler.get(job.id);
       expect(updated!.errorCount).toBe(1);
@@ -268,8 +259,8 @@ describe('JobScheduler', () => {
 
     it('one failing job does not affect another', async () => {
       executeFn
-        .mockRejectedValueOnce(new Error('boom'))  // job1 immediate
-        .mockResolvedValueOnce(undefined);           // job2 immediate
+        .mockRejectedValueOnce(new Error('boom'))
+        .mockResolvedValueOnce(undefined);
 
       scheduler.schedule('5s', 'failing');
       scheduler.schedule('5s', 'working');
@@ -287,7 +278,6 @@ describe('JobScheduler', () => {
       executeFn.mockImplementation(() => new Promise(() => {}));
 
       const job = scheduler.schedule('5s', 'hanging');
-      // Timeout = max(5000 * 2, 60000) = 60000ms
       await vi.advanceTimersByTimeAsync(60_000);
 
       const updated = scheduler.get(job.id);

@@ -1,10 +1,4 @@
 // discipline.ts
-/**
- * Engineering discipline hooks.
- * Injects karpathy behavioral guardrails into code-writing agents
- * and provides slop-cleaner auto-spawn logic.
- */
-
 import type { AgentConfig } from "./agents.js";
 
 const DISCIPLINE_AGENTS = new Set(["plan-worker", "worker"]);
@@ -40,10 +34,6 @@ You MUST follow these behavioral guardrails during implementation:
 - Adding comments that restate what the code does
 `;
 
-/**
- * Returns a new AgentConfig with karpathy rules appended to the system prompt.
- * Returns the original agent unchanged if it's undefined.
- */
 export function augmentAgentWithKarpathy(agent: AgentConfig | undefined): AgentConfig | undefined {
   if (!agent) return agent;
   return {

@@ -1,13 +1,5 @@
 // runner-events.ts
-/**
- * Helpers for parsing Pi JSON mode events and summarizing subagent results.
- */
-
 import type { SingleResult } from "./types.js";
-
-// ---------------------------------------------------------------------------
-// Message deduplication
-// ---------------------------------------------------------------------------
 
 const seenSignaturesKey = Symbol("seenMessageSignatures");
 

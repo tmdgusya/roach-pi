@@ -1,9 +1,4 @@
 // plan-parser.ts
-/**
- * Parses plan markdown files into structured task data.
- * Used to enforce the validator information barrier —
- * validator prompts are built from parsed plan data, not LLM-composed text.
- */
 
 export interface PlanTask {
   /** Task number extracted from "### Task N:" header */

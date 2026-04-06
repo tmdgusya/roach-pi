@@ -1,19 +1,10 @@
 import type { ExtensionState } from "./state.js";
 import { PI_TOOL_NAME_SET } from "./pi-tools.js";
 
-// ============================================================
-// Constants
-// ============================================================
-
 /** Tool results older than this are truncated during microcompaction (60 min) */
 export const MICROCOMPACT_AGE_MS = 60 * 60 * 1000;
 
-/** Tools whose results can be microcompacted — all pi built-in tools. */
 const COMPACTABLE_TOOLS = PI_TOOL_NAME_SET;
-
-// ============================================================
-// Microcompaction
-// ============================================================
 
 export function microcompactMessages<T extends { role: string; timestamp: number; toolName?: string; isError?: boolean; content?: any }>(
   messages: T[],
@@ -41,10 +32,6 @@ export function microcompactMessages<T extends { role: string; timestamp: number
     return { ...msg, content };
   });
 }
-
-// ============================================================
-// Compaction Prompts
-// ============================================================
 
 const NO_TOOLS_PREAMBLE = `CRITICAL: Respond with TEXT ONLY. Do NOT call any tools.
 
@@ -178,10 +165,6 @@ Please provide your summary based on the conversation so far, following this str
 
   return prompt;
 }
-
-// ============================================================
-// Summary Formatting
-// ============================================================
 
 export function formatCompactSummary(summary: string): string {
   let formatted = summary;

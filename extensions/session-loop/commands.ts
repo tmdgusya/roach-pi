@@ -66,7 +66,6 @@ export function registerLoopCommands(pi: ExtensionAPI, scheduler: JobScheduler) 
           return;
         }
 
-        // ctx.ui.select() accepts string[] — format: "jobId | interval | prompt"
         const options = jobs.map(
           j => `${j.id} | every ${j.intervalMs}ms | ${j.prompt.substring(0, 40)}`
         );
@@ -74,7 +73,6 @@ export function registerLoopCommands(pi: ExtensionAPI, scheduler: JobScheduler) 
 
         if (!selected) return;
 
-        // Extract job ID from the formatted string (first segment before " | ")
         const selectedJobId = selected.split(' | ')[0];
 
         try {
@@ -117,7 +115,7 @@ export function registerLoopCommands(pi: ExtensionAPI, scheduler: JobScheduler) 
         return;
       }
 
-      console.log('\n📋 Active Loop Jobs');
+      console.log('\nActive Loop Jobs');
       console.log('='.repeat(60));
 
       for (const job of jobs) {
@@ -132,7 +130,7 @@ export function registerLoopCommands(pi: ExtensionAPI, scheduler: JobScheduler) 
         console.log(`  Last run: ${lastRun} | Next run: ${nextRun}`);
       }
 
-      console.log('\n📊 Stats');
+      console.log('\nStats');
       console.log(`  Total jobs: ${stats.totalJobs}`);
       console.log(`  Executing now: ${stats.executingJobs}`);
       console.log(`  Total runs: ${stats.totalExecutions}`);
