@@ -15,6 +15,7 @@ export async function extractMainContent(
 ): Promise<ExtractedArticle | null> {
   try {
     const [{ JSDOM }, { Readability }] = await Promise.all([
+      // @ts-expect-error no type declarations for jsdom
       import("jsdom"),
       import("@mozilla/readability"),
     ]);

@@ -3,7 +3,7 @@
  * Dynamic imports defer loading ~1.4MB+ of libraries until first use.
  */
 
-type TurndownService = InstanceType<typeof import("turndown").default>;
+import type TurndownService from "turndown";
 
 let turndownPromise: Promise<TurndownService> | undefined;
 
@@ -20,6 +20,7 @@ export async function getTurndownService(): Promise<TurndownService> {
   return (turndownPromise ??= (async () => {
     const [turndownMod, gfmMod] = await Promise.all([
       import("turndown"),
+      // @ts-expect-error no type declarations for turndown-plugin-gfm
       import("turndown-plugin-gfm"),
     ]);
 

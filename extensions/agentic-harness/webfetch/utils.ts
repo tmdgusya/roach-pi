@@ -1,25 +1,14 @@
-/**
- * Core fetch + convert pipeline for the webfetch tool.
- * Fetches URLs via Node.js built-in fetch, detects content type,
- * extracts article content via Readability, converts to Markdown via Turndown GFM,
- * and caches results in an LRU cache.
- */
 
 import type { CacheEntry, ExtractionMethod, WebFetchDetails } from "./types.js";
 import { WebFetchCache } from "./cache.js";
 import { extractMainContent, isArticleContent } from "./extractContent.js";
 import { getTurndownService } from "./turndown.js";
-
 const MAX_CONTENT_SIZE = 10 * 1024 * 1024; // 10MB
 const FETCH_TIMEOUT_MS = 30_000; // 30 seconds
 const DEFAULT_USER_AGENT =
   "Mozilla/5.0 (compatible; WebFetchTool/1.0)";
 
 const cache = new WebFetchCache();
-
-function getCacheKey(url: string, options: { raw?: boolean }): string {
-  return JSON.stringify({ url, mode: options.raw ? "full" : "auto" });
-}
 
 function truncateContent(content: string, maxLength?: number): string {
   if (!maxLength || content.length <= maxLength) return content;
@@ -32,19 +21,13 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
-/**
- * Fetch a URL and convert its HTML content to Markdown.
- * Uses Readability for article extraction when possible,
- * falls back to full-page Turndown conversion.
- */
 export async function fetchUrlToMarkdown(
   url: string,
   options: { raw?: boolean; maxLength?: number; signal?: AbortSignal } = {},
 ): Promise<{ content: string; details: WebFetchDetails }> {
   const startTime = Date.now();
-  const cacheKey = getCacheKey(url, options);
+  const cacheKey = JSON.stringify({ url, mode: options.raw ? "full" : "auto" });
 
-  // Check cache first
   const cached = cache.get(cacheKey);
   if (cached) {
     return {
@@ -60,7 +43,6 @@ export async function fetchUrlToMarkdown(
     };
   }
 
-  // Set up abort controller with timeout + optional external signal
   const controller = new AbortController();
   const timeoutId = setTimeout(
     () => controller.abort(),
@@ -82,7 +64,6 @@ export async function fetchUrlToMarkdown(
     );
   }
 
-  // Fetch the URL
   let response: Response;
   try {
     response = await fetch(url, {
@@ -110,7 +91,6 @@ export async function fetchUrlToMarkdown(
   const contentType =
     response.headers.get("content-type") || "application/octet-stream";
 
-  // Size pre-check via Content-Length header
   const contentLength = response.headers.get("content-length");
   if (contentLength && parseInt(contentLength) > MAX_CONTENT_SIZE) {
     throw new Error(
@@ -118,7 +98,6 @@ export async function fetchUrlToMarkdown(
     );
   }
 
-  // Binary / non-HTML content
   const isHtml =
     contentType.includes("text/html") ||
     contentType.includes("application/xhtml");
@@ -170,7 +149,6 @@ export async function fetchUrlToMarkdown(
     };
   }
 
-  // HTML content — convert to Markdown
   const htmlBuffer = await response.arrayBuffer();
   const bytes = htmlBuffer.byteLength;
 
@@ -181,21 +159,17 @@ export async function fetchUrlToMarkdown(
   }
 
   const html = new TextDecoder("utf-8").decode(htmlBuffer);
+  const turndown = await getTurndownService();
   let markdown: string;
   let method: ExtractionMethod;
 
   if (options.raw) {
-    // Raw mode: skip Readability, use full Turndown conversion
-    const turndown = await getTurndownService();
     markdown = turndown.turndown(html);
     method = "full";
   } else if (isArticleContent(html)) {
-    // Try Readability extraction first
     const article = await extractMainContent(html, url);
 
     if (article) {
-      const turndown = await getTurndownService();
-
       const metadata = [
         article.title && `# ${article.title}`,
         article.byline && `> By ${article.byline}`,
@@ -209,14 +183,10 @@ export async function fetchUrlToMarkdown(
       markdown = metadata ? `${metadata}\n\n${body}` : body;
       method = "readability";
     } else {
-      // Readability failed — full-page fallback
-      const turndown = await getTurndownService();
       markdown = turndown.turndown(html);
       method = "full";
     }
   } else {
-    // Not article-like — full-page Turndown
-    const turndown = await getTurndownService();
     markdown = turndown.turndown(html);
     method = "full";
   }
