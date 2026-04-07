@@ -731,6 +731,16 @@ export default function (pi: ExtensionAPI) {
   });
 
   const setupHandler = async (_args: string, ctx: any) => {
+    // Check for agent-browser installation
+    let agentBrowserInstalled = false;
+    try {
+      const { execSync } = await import("child_process");
+      execSync("agent-browser --version", { stdio: "pipe", timeout: 5000 });
+      agentBrowserInstalled = true;
+    } catch {
+      agentBrowserInstalled = false;
+    }
+
     const settingsPath = join(homedir(), ".pi", "agent", "settings.json");
 
     let current: Record<string, unknown> = {};
@@ -740,30 +750,54 @@ export default function (pi: ExtensionAPI) {
     } catch {
     }
 
-    if (current.quietStartup === true) {
-      ctx.ui.notify("Settings already configured — quietStartup is true.", "info");
+    // Build the setup message based on current state
+    const setupSteps: string[] = [];
+    if (!agentBrowserInstalled) {
+      setupSteps.push("[ ] Install agent-browser (required for deep-research skill)");
+    }
+    if (current.quietStartup !== true) {
+      setupSteps.push("[ ] Set quietStartup: true");
+    }
+
+    if (setupSteps.length === 0) {
+      ctx.ui.notify("All setup tasks complete!", "info");
       return;
     }
 
     const ok = await ctx.ui.confirm(
-      "Setup: Configure Recommended Settings",
+      "Setup: Recommended Configuration",
       [
-        "This will add \"quietStartup\": true to your settings.json:",
-        `  ${settingsPath}`,
-        "",
-        "This hides the default Skills/Extensions/Themes listing at startup.",
-        "The ROACH PI banner takes over instead.",
+        "This will:",
+        ...setupSteps,
         "",
         "Proceed?",
       ].join("\n"),
     );
     if (!ok) return;
 
-    const updated = { ...current, quietStartup: true };
-    await mkdir(dirname(settingsPath), { recursive: true });
-    await writeFile(settingsPath, JSON.stringify(updated, null, 2) + "\n");
+    // Install agent-browser if needed
+    if (!agentBrowserInstalled) {
+      ctx.ui.notify("Installing agent-browser...", "info");
+      try {
+        const { execSync } = await import("child_process");
+        execSync("npm i -g agent-browser", { stdio: "inherit", timeout: 120000 });
+        execSync("agent-browser install", { stdio: "inherit", timeout: 120000 });
+        ctx.ui.notify("agent-browser installed successfully!", "info");
+      } catch (error) {
+        ctx.ui.notify(
+          "Failed to install agent-browser. Please run manually: npm i -g agent-browser && agent-browser install",
+          "error"
+        );
+      }
+    }
 
-    ctx.ui.notify("Settings updated — quietStartup is now true. Restart pi to see the effect.", "info");
+    // Configure quietStartup if needed
+    if (current.quietStartup !== true) {
+      const updated = { ...current, quietStartup: true };
+      await mkdir(dirname(settingsPath), { recursive: true });
+      await writeFile(settingsPath, JSON.stringify(updated, null, 2) + "\n");
+      ctx.ui.notify("Settings updated — quietStartup is now true.", "info");
+    }
 
     // Ask to star the repository if gh is available
     try {
