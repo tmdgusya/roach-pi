@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0](https://github.com/tmdgusya/roach-pi/compare/v1.3.0...v1.4.0) (2026-04-07)
+
+### Features
+
+* add agentic-brainstorming skill ([a301f49](https://github.com/tmdgusya/roach-pi/commit/a301f49bc7ae9bde82b99b1f40f06a24b04349c7))
+
+### Miscellaneous
+
+* remove AI-generated code smells ([ff4d214](https://github.com/tmdgusya/roach-pi/commit/ff4d2145e3a82e89b3e2bd72c47d95ad784c2785))
+
 ## [1.3.0](https://github.com/tmdgusya/roach-pi/compare/v1.2.1...v1.3.0) (2026-04-06)
 
 ### Features
