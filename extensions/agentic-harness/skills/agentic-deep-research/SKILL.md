@@ -93,6 +93,13 @@ agent-browser --session subagent-1 open {url}
 agent-browser --session subagent-2 open {url}
 ```
 
+### Linux / Container Environments
+On Linux, VMs, or containers, you may need `--args "--no-sandbox"`:
+```bash
+# Linux/VM/Container
+agent-browser --session subagent-1 --args "--no-sandbox" open {url}
+```
+
 ### Session Lifecycle
 1. **Create:** Named session for each subagent
 2. **Use:** Open URLs, extract content, write findings
@@ -286,8 +293,10 @@ OUTPUT_FILE="$RESEARCH_DIR/subagent-1_findings.md"
 URLS=$(jq -r '.assigned_urls[].url' "$TASK_FILE")
 
 # Create session and explore
+# Note: Add --args "--no-sandbox" on Linux/VM/container
 for url in $URLS; do
     agent-browser --session "$SESSION_NAME" open "$url"
+    # Linux: agent-browser --session "$SESSION_NAME" --args "--no-sandbox" open "$url"
     agent-browser wait --load networkidle
     
     # Extract content
