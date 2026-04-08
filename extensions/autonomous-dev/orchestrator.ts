@@ -15,36 +15,32 @@ import {
   markNeedsClarification,
   resumeFromClarification,
 } from "./github.js";
+import { logAutonomousDev } from "./logger.js";
 
 /**
  * States in the issue processing lifecycle
  */
 type IssueState =
-  | "ready" // Issue has autonomous-dev:ready label, not yet locked
-  | "processing" // Locked, worker spawned, awaiting result
-  | "clarifying" // Worker returned needs-clarification, waiting for author response
-  | "complete" // Worker returned completed
-  | "failed"; // Worker returned failed, or max clarification rounds reached
+  | "ready"
+  | "processing"
+  | "clarifying"
+  | "complete"
+  | "failed";
 
 interface TrackedIssueState {
   issueNumber: number;
   title: string;
   state: IssueState;
   clarificationRound: number;
-  clarificationQuestionTimestamp: string | null; // When we asked the question
+  clarificationQuestionTimestamp: string | null;
   lockedAt: Date;
 }
 
-/**
- * Worker result stub — returns success without spawning actual agent.
- * Replace with real subagent spawning in M4.
- */
 async function stubWorkerSpawn(
   _issueNumber: number,
   _config: OrchestratorConfig,
   _onActivity?: WorkerActivityCallback
 ): Promise<WorkerResult> {
-  // In M2, we just return success. In M4, this will call runAgent().
   return {
     status: "completed",
     prUrl: "https://github.com/example/repo/pull/123",
@@ -52,11 +48,24 @@ async function stubWorkerSpawn(
   };
 }
 
+function describeError(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+
+  return { value: String(error) };
+}
+
 export class AutonomousDevOrchestrator {
   private config: OrchestratorConfig;
   private status: OrchestratorStatus;
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private trackedIssues: Map<number, TrackedIssueState> = new Map();
+  private runToken = 0;
   private workerSpawner: (
     issueNumber: number,
     config: OrchestratorConfig,
@@ -89,6 +98,22 @@ export class AutonomousDevOrchestrator {
     this.updateActivity("idle - waiting for work");
   }
 
+  private logEvent(event: string, entry: {
+    level?: "info" | "warn" | "error";
+    issueNumber?: number;
+    issueTitle?: string;
+    message?: string;
+    details?: Record<string, unknown>;
+  } = {}): void {
+    logAutonomousDev(entry.level ?? "info", event, {
+      repo: this.config.repo || undefined,
+      issueNumber: entry.issueNumber,
+      issueTitle: entry.issueTitle,
+      message: entry.message,
+      details: entry.details,
+    });
+  }
+
   private updateActivity(activity: string, issueNumber: number | null = null, issueTitle: string | null = null): void {
     this.status.currentActivity = activity;
     this.status.currentIssueNumber = issueNumber;
@@ -106,14 +131,16 @@ export class AutonomousDevOrchestrator {
     this.status.recentActivities = recent.slice(0, 3);
   }
 
-  /**
-   * Start the polling loop
-   */
   start(): void {
     if (this.status.isRunning) return;
     this.status.isRunning = true;
+    this.runToken++;
+    this.logEvent("engine.start", {
+      message: "Starting autonomous-dev polling loop",
+      details: { pollIntervalMs: this.config.pollIntervalMs },
+    });
     this.updateActivity("starting engine");
-    void this.runPollCycle(); // Run immediately, then on interval
+    void this.runPollCycle();
     this.intervalId = setInterval(
       () => {
         void this.runPollCycle();
@@ -122,22 +149,21 @@ export class AutonomousDevOrchestrator {
     );
   }
 
-  /**
-   * Stop the polling loop
-   */
   stop(): void {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
+    this.runToken++;
     this.status.isRunning = false;
+    this.logEvent("engine.stop", {
+      message: "Stopping autonomous-dev polling loop",
+      details: { trackedIssueCount: this.trackedIssues.size },
+    });
     this.updateActivity("stopped");
     this.trackedIssues.clear();
   }
 
-  /**
-   * Get current orchestrator status
-   */
   getStatus(): OrchestratorStatus {
     this.status.trackedIssues = Array.from(this.trackedIssues.values()).map(
       (t) => ({
@@ -157,9 +183,6 @@ export class AutonomousDevOrchestrator {
     };
   }
 
-  /**
-   * Set the worker spawn function (used in M4 to wire real agent)
-   */
   setWorkerSpawner(
     spawner: (
       issueNumber: number,
@@ -170,43 +193,66 @@ export class AutonomousDevOrchestrator {
     this.workerSpawner = spawner;
   }
 
-  /**
-   * One poll cycle — check for new work and process clarification responses
-   */
   async pollCycle(): Promise<void> {
     await this.runPollCycle();
   }
 
   private async runPollCycle(): Promise<void> {
+    const runToken = this.runToken;
+    const pollStartedAt = Date.now();
     this.status.lastPollStartedAt = new Date().toISOString();
+    this.logEvent("poll.started", {
+      message: "Polling GitHub issues",
+      details: { trackedIssueCount: this.trackedIssues.size },
+    });
     this.updateActivity("polling GitHub issues");
 
     try {
       if (!this.config.repo) {
         console.warn("[autonomous-dev] No repo configured, skipping poll");
+        this.logEvent("poll.skipped", {
+          level: "warn",
+          message: "Skipping poll because no repo is configured",
+        });
         this.status.lastPollCompletedAt = new Date().toISOString();
         this.status.lastPollSucceededAt = this.status.lastPollCompletedAt;
         this.status.lastError = null;
         this.status.lastErrorAt = null;
+        if (runToken !== this.runToken) return;
         this.updateActivity("idle - waiting for work");
         return;
       }
 
-      // 1. Pick up new ready issues
       await this.pickupReadyIssues();
-
-      // 2. Check clarification responses
       await this.checkClarificationResponses();
 
       this.status.lastPollCompletedAt = new Date().toISOString();
       this.status.lastPollSucceededAt = this.status.lastPollCompletedAt;
       this.status.lastError = null;
       this.status.lastErrorAt = null;
+      this.logEvent("poll.completed", {
+        message: "Poll cycle completed",
+        details: {
+          durationMs: Date.now() - pollStartedAt,
+          trackedIssueCount: this.trackedIssues.size,
+          totalProcessed: this.status.stats.totalProcessed,
+        },
+      });
+      if (runToken !== this.runToken) return;
       this.updateActivity(this.trackedIssues.size > 0 ? "tracking active issues" : "idle - waiting for work");
     } catch (error) {
       this.status.lastPollCompletedAt = new Date().toISOString();
       this.status.lastError = error instanceof Error ? error.message : String(error);
       this.status.lastErrorAt = this.status.lastPollCompletedAt;
+      this.logEvent("poll.failed", {
+        level: "error",
+        message: "Poll cycle failed",
+        details: {
+          durationMs: Date.now() - pollStartedAt,
+          error: describeError(error),
+        },
+      });
+      if (runToken !== this.runToken) return;
       this.updateActivity("error while polling GitHub");
       throw error;
     }
@@ -224,16 +270,29 @@ export class AutonomousDevOrchestrator {
       ]
     );
 
+    this.logEvent("issues.ready.found", {
+      message: `Found ${issues.length} ready issue(s)`,
+      details: { issueNumbers: issues.map((issue) => issue.number) },
+    });
+
     for (const issue of issues) {
-      // Skip already tracked
-      if (this.trackedIssues.has(issue.number)) continue;
+      if (this.trackedIssues.has(issue.number)) {
+        this.logEvent("issue.skip_tracked", {
+          issueNumber: issue.number,
+          issueTitle: issue.title,
+          message: "Skipping issue already tracked in memory",
+        });
+        continue;
+      }
 
+      this.logEvent("issue.locking", {
+        issueNumber: issue.number,
+        issueTitle: issue.title,
+        message: "Locking ready issue",
+      });
       this.updateActivity("locking GitHub issue", issue.number, issue.title);
-
-      // Lock the issue
       await lockIssue(this.config.repo, issue.number);
 
-      // Track it
       this.trackedIssues.set(issue.number, {
         issueNumber: issue.number,
         title: issue.title,
@@ -243,7 +302,6 @@ export class AutonomousDevOrchestrator {
         lockedAt: new Date(),
       });
 
-      // Spawn worker
       await this.spawnWorkerForIssue(issue.number);
     }
   }
@@ -254,9 +312,29 @@ export class AutonomousDevOrchestrator {
 
     try {
       const trackedTitle = tracked.title;
+      this.logEvent("worker.started", {
+        issueNumber,
+        issueTitle: trackedTitle,
+        message: "Launching autonomous worker",
+      });
       this.updateActivity("processing issue", issueNumber, trackedTitle);
       const result = await this.workerSpawner(issueNumber, this.config, (activity) => {
+        this.logEvent("worker.activity", {
+          issueNumber,
+          issueTitle: trackedTitle,
+          message: activity,
+        });
         this.updateActivity(activity, issueNumber, trackedTitle);
+      });
+      this.logEvent("worker.result", {
+        issueNumber,
+        issueTitle: trackedTitle,
+        message: `Worker returned ${result.status}`,
+        details: result.status === "completed"
+          ? { prUrl: result.prUrl, summary: result.summary }
+          : result.status === "needs-clarification"
+            ? { question: result.question }
+            : { error: result.error },
       });
       await this.handleWorkerResult(issueNumber, result);
     } catch (err) {
@@ -264,6 +342,13 @@ export class AutonomousDevOrchestrator {
         `[autonomous-dev] Worker failed for #${issueNumber}:`,
         err
       );
+      this.logEvent("worker.failed", {
+        level: "error",
+        issueNumber,
+        issueTitle: tracked.title,
+        message: "Worker threw before returning a result",
+        details: { error: describeError(err) },
+      });
       tracked.state = "failed";
       this.status.stats.totalFailed++;
       this.status.stats.totalProcessed++;
@@ -284,9 +369,7 @@ export class AutonomousDevOrchestrator {
       this.status.stats.totalProcessed++;
       await this.handleCompletion(issueNumber, result.prUrl, result.summary);
     } else if (result.status === "needs-clarification") {
-      if (
-        tracked.clarificationRound >= this.config.maxClarificationRounds
-      ) {
+      if (tracked.clarificationRound >= this.config.maxClarificationRounds) {
         tracked.state = "failed";
         this.status.stats.totalFailed++;
         this.status.stats.totalProcessed++;
@@ -297,6 +380,12 @@ export class AutonomousDevOrchestrator {
         );
         await this.handleFailure(issueNumber);
       } else {
+        this.logEvent("issue.needs_clarification", {
+          issueNumber,
+          issueTitle: tracked.title,
+          message: "Worker requested clarification",
+          details: { question: result.question, clarificationRound: tracked.clarificationRound + 1 },
+        });
         tracked.state = "clarifying";
         tracked.clarificationRound++;
         tracked.clarificationQuestionTimestamp = new Date().toISOString();
@@ -310,6 +399,13 @@ export class AutonomousDevOrchestrator {
         );
       }
     } else if (result.status === "failed") {
+      this.logEvent("issue.failed_result", {
+        level: "error",
+        issueNumber,
+        issueTitle: tracked.title,
+        message: "Worker reported failure",
+        details: { error: result.error },
+      });
       tracked.state = "failed";
       this.status.stats.totalFailed++;
       this.status.stats.totalProcessed++;
@@ -337,14 +433,18 @@ export class AutonomousDevOrchestrator {
 
       const hasNewComment = ctx.comments.some(
         (c) =>
-          !c.isFromBot && // Not from bot
-          c.author.toLowerCase() !== "github-actions[bot]" && // Not from CI
+          !c.isFromBot &&
+          c.author.toLowerCase() !== "github-actions[bot]" &&
           new Date(c.createdAt) >
             new Date(tracked.clarificationQuestionTimestamp!)
       );
 
       if (hasNewComment) {
-        // Resume processing
+        this.logEvent("issue.resume", {
+          issueNumber: tracked.issueNumber,
+          issueTitle: tracked.title,
+          message: "Resuming issue after clarification response",
+        });
         this.updateActivity("resuming issue", tracked.issueNumber, tracked.title);
         tracked.state = "processing";
         tracked.clarificationQuestionTimestamp = null;
@@ -355,15 +455,21 @@ export class AutonomousDevOrchestrator {
   }
 
   private async handleCompletion(
-    _issueNumber: number,
+    issueNumber: number,
     prUrl: string,
     summary: string
   ): Promise<void> {
-    const tracked = this.trackedIssues.get(_issueNumber);
-    this.updateActivity("completing issue", _issueNumber, tracked?.title ?? null);
+    const tracked = this.trackedIssues.get(issueNumber);
+    this.logEvent("issue.completed", {
+      issueNumber,
+      issueTitle: tracked?.title,
+      message: "Marking issue as completed",
+      details: { prUrl, summary },
+    });
+    this.updateActivity("completing issue", issueNumber, tracked?.title ?? null);
     await swapLabels(
       this.config.repo,
-      _issueNumber,
+      issueNumber,
       [
         AUTONOMOUS_LABELS.IN_PROGRESS,
         AUTONOMOUS_LABELS.NEEDS_CLARIFICATION,
@@ -372,15 +478,21 @@ export class AutonomousDevOrchestrator {
     );
     await postComment(
       this.config.repo,
-      _issueNumber,
+      issueNumber,
       `✅ **Autonomous implementation complete!**\n\n${summary}\n\nPR: ${prUrl}`
     );
-    this.trackedIssues.delete(_issueNumber);
+    this.trackedIssues.delete(issueNumber);
     this.updateActivity(this.trackedIssues.size > 0 ? "tracking active issues" : "idle - waiting for work");
   }
 
   private async handleFailure(issueNumber: number): Promise<void> {
     const tracked = this.trackedIssues.get(issueNumber);
+    this.logEvent("issue.failed", {
+      level: "warn",
+      issueNumber,
+      issueTitle: tracked?.title,
+      message: "Marking issue as failed",
+    });
     this.updateActivity("failing issue", issueNumber, tracked?.title ?? null);
     await swapLabels(
       this.config.repo,

@@ -7,6 +7,7 @@ import { getIssueWithComments, detectRepo } from "./github.js";
 import { loadAgentsFromDir, type AgentConfig } from "../agentic-harness/agents.js";
 import { runAgent, resolveDepthConfig } from "../agentic-harness/subagent.js";
 import { getDisplayItems, getFinalOutput, type SingleResult } from "../agentic-harness/types.js";
+import { getAutonomousDevLogPath, logAutonomousDev } from "./logger.js";
 
 // Experimental feature flag
 const AUTONOMOUS_DEV_ENABLED = process.env.PI_AUTONOMOUS_DEV === "1";
@@ -20,6 +21,7 @@ let workerSpawner: ((issueNumber: number, config: { repo: string }, onActivity?:
 let initialized = false;
 let activeSessionContext: ExtensionContext | null = null;
 let uiRefreshInterval: ReturnType<typeof setInterval> | null = null;
+let processCleanupRegistered = false;
 
 const STATUS_KEY = "autonomous-dev";
 const WIDGET_KEY = "autonomous-dev-widget";
@@ -81,6 +83,7 @@ function formatStatusLines(orch: AutonomousDevOrchestrator): string[] {
     `Last successful poll: ${formatRelativeTime(status.lastPollSucceededAt)}`,
     `Last error at: ${formatRelativeTime(status.lastErrorAt)}`,
     `Last error: ${status.lastError || "(none)"}`,
+    `Log file: ${getAutonomousDevLogPath()}`,
     `Stats: processed=${status.stats.totalProcessed}, completed=${status.stats.totalCompleted}, failed=${status.stats.totalFailed}, clarification=${status.stats.totalClarificationAsked}`,
     "Tracked issues:",
     trackedIssues,
@@ -145,6 +148,34 @@ function stopUiRefreshLoop(): void {
     activeSessionContext.ui.setWidget(WIDGET_KEY, undefined, { placement: "belowEditor" });
   }
   activeSessionContext = null;
+}
+
+function cleanupAutonomousDev(): void {
+  logAutonomousDev("info", "engine.cleanup", {
+    message: "Cleaning up autonomous-dev session resources",
+  });
+  stopUiRefreshLoop();
+  if (orchestrator) {
+    orchestrator.stop();
+    orchestrator = null;
+  }
+}
+
+function ensureProcessCleanupHooks(): void {
+  if (processCleanupRegistered) return;
+  processCleanupRegistered = true;
+
+  const cleanup = () => {
+    cleanupAutonomousDev();
+  };
+
+  process.once("exit", cleanup);
+  process.once("SIGINT", () => {
+    cleanup();
+  });
+  process.once("SIGTERM", () => {
+    cleanup();
+  });
 }
 
 function getOrchestrator(): AutonomousDevOrchestrator {
@@ -303,6 +334,11 @@ function createAutonomousWorkerSpawner() {
     config: { repo: string },
     onActivity?: WorkerActivityCallback
   ): Promise<WorkerResult> => {
+    logAutonomousDev("info", "worker.issue_context.loading", {
+      repo: config.repo,
+      issueNumber,
+      message: "Loading GitHub issue context for worker",
+    });
     onActivity?.(`loading issue #${issueNumber}`);
     const issueContext = await getIssueWithComments(config.repo, issueNumber);
 
@@ -314,6 +350,14 @@ function createAutonomousWorkerSpawner() {
         const harnessAgents = await loadAgentsFromDir(HARNESS_AGENTS_DIR, "bundled");
         cachedWorkerAgent = harnessAgents.find((agent) => agent.name === "worker") ?? null;
       }
+
+      logAutonomousDev("info", "worker.agent.selected", {
+        repo: config.repo,
+        issueNumber,
+        message: cachedWorkerAgent
+          ? `Selected ${cachedWorkerAgent.name} worker agent`
+          : "No worker agent configuration found",
+      });
     }
 
     if (!cachedWorkerAgent) {
@@ -321,6 +365,13 @@ function createAutonomousWorkerSpawner() {
     }
 
     const task = buildWorkerTask(issueNumber, config.repo, issueContext);
+    logAutonomousDev("info", "worker.run.started", {
+      repo: config.repo,
+      issueNumber,
+      issueTitle: issueContext.issue.title,
+      message: `Running ${cachedWorkerAgent.name} worker agent`,
+      details: { cwd: process.cwd() },
+    });
     onActivity?.(`starting worker for issue #${issueNumber}`);
 
     const result = await runAgent({
@@ -338,13 +389,35 @@ function createAutonomousWorkerSpawner() {
     });
 
     if (result.exitCode !== 0) {
+      logAutonomousDev("error", "worker.run.failed", {
+        repo: config.repo,
+        issueNumber,
+        issueTitle: issueContext.issue.title,
+        message: "Worker process exited with non-zero status",
+        details: {
+          exitCode: result.exitCode,
+          errorMessage: result.errorMessage,
+          stderr: result.stderr.trim() || undefined,
+        },
+      });
       return {
         status: "failed",
         error: result.errorMessage || result.stderr.trim() || "Worker process failed",
       };
     }
 
-    return parseWorkerResult(getFinalOutput(result.messages));
+    const finalOutput = getFinalOutput(result.messages);
+    const parsed = parseWorkerResult(finalOutput);
+    logAutonomousDev(parsed.status === "failed" ? "error" : "info", "worker.run.parsed", {
+      repo: config.repo,
+      issueNumber,
+      issueTitle: issueContext.issue.title,
+      message: `Parsed worker result as ${parsed.status}`,
+      details: {
+        outputPreview: finalOutput.slice(0, 500),
+      },
+    });
+    return parsed;
   };
 }
 
@@ -352,6 +425,7 @@ function ensureInitialized() {
   if (initialized) return;
   initialized = true;
   workerSpawner = createAutonomousWorkerSpawner();
+  ensureProcessCleanupHooks();
 }
 
 export default function (pi: ExtensionAPI) {
@@ -360,6 +434,9 @@ export default function (pi: ExtensionAPI) {
   ensureInitialized();
 
   pi.on("session_start", (_event, ctx) => {
+    logAutonomousDev("info", "session.start", {
+      message: "autonomous-dev session started",
+    });
     startUiRefreshLoop(ctx);
   });
 
@@ -376,9 +453,16 @@ export default function (pi: ExtensionAPI) {
         case "start": {
           const repo = parts[1] || (await detectRepo());
           if (!repo) {
+            logAutonomousDev("error", "command.start.invalid", {
+              message: "Start command failed because no repo was specified or detected",
+            });
             ctx.ui.notify("Error: No repo specified", "error");
             return;
           }
+          logAutonomousDev("info", "command.start", {
+            repo,
+            message: "Starting autonomous-dev via command",
+          });
           orch.stop();
           orchestrator = new AutonomousDevOrchestrator({
             repo,
@@ -395,6 +479,10 @@ export default function (pi: ExtensionAPI) {
         }
 
         case "stop": {
+          logAutonomousDev("info", "command.stop", {
+            repo: orch.getStatus().repo || undefined,
+            message: "Stopping autonomous-dev via command",
+          });
           orch.stop();
           updatePersistentUi(ctx, orch);
           ctx.ui.notify("Stopped autonomous dev engine", "info");
@@ -402,6 +490,10 @@ export default function (pi: ExtensionAPI) {
         }
 
         case "status": {
+          logAutonomousDev("info", "command.status", {
+            repo: orch.getStatus().repo || undefined,
+            message: "Printed autonomous-dev status",
+          });
           updatePersistentUi(ctx, orch);
           const statusLines = formatStatusLines(orch);
           console.log(`\n${statusLines.join("\n")}\n`);
@@ -410,6 +502,10 @@ export default function (pi: ExtensionAPI) {
         }
 
         case "poll": {
+          logAutonomousDev("info", "command.poll", {
+            repo: orch.getStatus().repo || undefined,
+            message: "Manual poll command invoked",
+          });
           await orch.pollCycle();
           updatePersistentUi(ctx, orch);
           ctx.ui.notify("Poll cycle completed", "info");
@@ -423,10 +519,9 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("session_shutdown", () => {
-    stopUiRefreshLoop();
-    if (orchestrator) {
-      orchestrator.stop();
-      orchestrator = null;
-    }
+    logAutonomousDev("info", "session.shutdown", {
+      message: "autonomous-dev session shutting down",
+    });
+    cleanupAutonomousDev();
   });
 }

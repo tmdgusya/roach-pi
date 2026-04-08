@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { AutonomousDevOrchestrator } from "../orchestrator.js";
 import { AUTONOMOUS_LABELS } from "../types.js";
 
+vi.mock("../logger.js", () => ({
+  logAutonomousDev: vi.fn(),
+}));
+
 // Mock the github module
 vi.mock("../github.js", async () => {
   const actual = await vi.importActual("../github.js");
@@ -28,6 +32,7 @@ import {
   markNeedsClarification,
   resumeFromClarification,
 } from "../github.js";
+import { logAutonomousDev } from "../logger.js";
 
 const mockListIssues = listIssuesByLabel as unknown as ReturnType<typeof vi.fn>;
 const mockGetIssue = getIssueWithComments as unknown as ReturnType<typeof vi.fn>;
@@ -36,6 +41,7 @@ const mockPostComment = postComment as unknown as ReturnType<typeof vi.fn>;
 const mockLock = lockIssue as unknown as ReturnType<typeof vi.fn>;
 const mockNeedsClarification = markNeedsClarification as unknown as ReturnType<typeof vi.fn>;
 const mockResume = resumeFromClarification as unknown as ReturnType<typeof vi.fn>;
+const mockLogAutonomousDev = logAutonomousDev as unknown as ReturnType<typeof vi.fn>;
 
 describe("orchestrator", () => {
   let orchestrator: AutonomousDevOrchestrator;
@@ -99,6 +105,25 @@ describe("orchestrator", () => {
       expect((orchestrator as any).intervalId).toBeNull();
       expect(orchestrator.getStatus().isRunning).toBe(false);
     });
+
+    it("should keep current activity as stopped after stop during an in-flight poll", async () => {
+      let releaseListIssues: (() => void) | null = null;
+      mockListIssues.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseListIssues = () => resolve([]);
+          })
+      );
+
+      const pollPromise = orchestrator.pollCycle();
+      orchestrator.stop();
+      releaseListIssues?.();
+      await pollPromise;
+
+      const status = orchestrator.getStatus();
+      expect(status.isRunning).toBe(false);
+      expect(status.currentActivity).toBe("stopped");
+    });
   });
 
   describe("pickupReadyIssues", () => {
@@ -119,6 +144,11 @@ describe("orchestrator", () => {
 
       expect(mockLock).toHaveBeenCalledWith("owner/repo", 42);
       expect(workerSpawner).toHaveBeenCalledWith(42, expect.any(Object), expect.any(Function));
+      expect(mockLogAutonomousDev).toHaveBeenCalledWith(
+        "info",
+        "issues.ready.found",
+        expect.objectContaining({ repo: "owner/repo" })
+      );
     });
 
     it("should skip issues already tracked", async () => {
@@ -248,6 +278,11 @@ describe("orchestrator", () => {
 
       await orchestrator.pollCycle();
 
+      expect(mockLogAutonomousDev).toHaveBeenCalledWith(
+        "error",
+        "issue.failed_result",
+        expect.objectContaining({ issueNumber: 42, repo: "owner/repo" })
+      );
       expect(mockSwap).toHaveBeenCalledWith(
         "owner/repo",
         42,
@@ -476,6 +511,11 @@ describe("orchestrator", () => {
 
       await expect(orchestrator.pollCycle()).rejects.toThrow("gh exploded");
 
+      expect(mockLogAutonomousDev).toHaveBeenCalledWith(
+        "error",
+        "poll.failed",
+        expect.objectContaining({ repo: "owner/repo" })
+      );
       const status = orchestrator.getStatus();
       expect(status.lastPollStartedAt).not.toBeNull();
       expect(status.lastPollCompletedAt).not.toBeNull();

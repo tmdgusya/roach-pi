@@ -60,7 +60,13 @@ export function getCycleViolations(requested: string[], stack: string[]): string
 
 export function getPiInvocation(): { command: string; args: string[] } {
   const mainScript = process.argv[1];
-  if (mainScript && existsSync(mainScript)) {
+  const normalizedMainScript = mainScript?.replace(/\\/g, "/").toLowerCase() ?? "";
+  const isTransientRunner =
+    normalizedMainScript.includes("/vite-node/") ||
+    normalizedMainScript.includes("/tsx/") ||
+    normalizedMainScript.includes("/ts-node/");
+
+  if (!isTransientRunner && mainScript && existsSync(mainScript)) {
     const execName = basename(process.execPath).toLowerCase();
     if (execName === "node" || execName === "bun" || execName.startsWith("node.") || execName.startsWith("bun.")) {
       return { command: process.execPath, args: [mainScript] };

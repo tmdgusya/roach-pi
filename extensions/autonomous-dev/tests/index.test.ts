@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
+vi.mock("../logger.js", () => ({
+  getAutonomousDevLogPath: vi.fn(() => "/tmp/autonomous-dev.log"),
+  logAutonomousDev: vi.fn(),
+}));
+
 function createPiMock() {
   const events = new Map<string, Function>();
   return {
@@ -63,6 +68,7 @@ describe("autonomous-dev extension command registration", () => {
 
   it("registers autonomous-dev with a string name and handler when enabled", async () => {
     process.env.PI_AUTONOMOUS_DEV = "1";
+    const exitSpy = vi.spyOn(process, "once");
     const { default: registerExtension } = await import("../index.js");
     const pi = createPiMock();
 
@@ -71,6 +77,9 @@ describe("autonomous-dev extension command registration", () => {
     expect(pi.registerCommand).toHaveBeenCalledTimes(1);
     expect(pi.__events.has("session_start")).toBe(true);
     expect(pi.__events.has("session_shutdown")).toBe(true);
+    expect(exitSpy).toHaveBeenCalledWith("exit", expect.any(Function));
+    expect(exitSpy).toHaveBeenCalledWith("SIGINT", expect.any(Function));
+    expect(exitSpy).toHaveBeenCalledWith("SIGTERM", expect.any(Function));
     const [name, options] = (pi.registerCommand as any).mock.calls[0];
     expect(name).toBe("autonomous-dev");
     expect(options).toMatchObject({
@@ -103,6 +112,20 @@ describe("autonomous-dev extension command registration", () => {
     );
   });
 
+  it("cleans up footer and widget on session shutdown", async () => {
+    process.env.PI_AUTONOMOUS_DEV = "1";
+    const { default: registerExtension } = await import("../index.js");
+    const pi = createPiMock();
+    const ctx = createCommandContext();
+
+    registerExtension(pi);
+    pi.__events.get("session_start")?.({ type: "session_start" }, ctx);
+    pi.__events.get("session_shutdown")?.({ type: "session_shutdown" }, ctx);
+
+    expect(ctx.ui.setStatus).toHaveBeenCalledWith("autonomous-dev", undefined);
+    expect(ctx.ui.setWidget).toHaveBeenCalledWith("autonomous-dev-widget", undefined, { placement: "belowEditor" });
+  });
+
   it("prints observable status details for the status command", async () => {
     process.env.PI_AUTONOMOUS_DEV = "1";
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -117,6 +140,7 @@ describe("autonomous-dev extension command registration", () => {
 
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("Autonomous Dev Status"));
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("Tracked issues:"));
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("Log file: /tmp/autonomous-dev.log"));
     expect(ctx.ui.notify).toHaveBeenCalledWith("Printed autonomous dev status", "info");
     expect(ctx.ui.setStatus).toHaveBeenCalled();
     expect(ctx.ui.setWidget).toHaveBeenCalledWith(
