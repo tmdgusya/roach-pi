@@ -56,6 +56,25 @@ function addAssistantMessage(result: SingleResult, message: any): boolean {
     result.usage.contextTokens = usage.totalTokens || 0;
   }
 
+  // Detect nested subagent calls from toolCall parts
+  if (Array.isArray(message.content)) {
+    for (const part of message.content) {
+      if (
+        part?.type === "toolCall" &&
+        part.name === "subagent" &&
+        part.arguments
+      ) {
+        if (!result.nestedCalls) result.nestedCalls = [];
+        const args = part.arguments as Record<string, unknown>;
+        const agent = (args.agent as string) || "unknown";
+        const task = typeof args.task === "string"
+          ? args.task.slice(0, 120)
+          : "(no task)";
+        result.nestedCalls.push({ agent, task });
+      }
+    }
+  }
+
   return true;
 }
 
