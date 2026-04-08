@@ -1,4 +1,3 @@
-// render.ts
 import * as os from "os";
 import { getMarkdownTheme, type Theme } from "@mariozechner/pi-coding-agent";
 import { Container, Markdown, Spacer, Text } from "@mariozechner/pi-tui";

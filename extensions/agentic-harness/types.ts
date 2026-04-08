@@ -1,5 +1,3 @@
-// types.ts
-
 /** Aggregated token usage from a subagent run. */
 export interface UsageStats {
   input: number;
@@ -11,7 +9,6 @@ export interface UsageStats {
   turns: number;
 }
 
-/** A nested subagent call detected from a child process's tool usage. */
 export interface NestedSubagentCall {
   agent: string;
   task: string;

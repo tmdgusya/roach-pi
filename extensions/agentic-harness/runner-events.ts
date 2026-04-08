@@ -1,4 +1,3 @@
-// runner-events.ts
 import type { SingleResult } from "./types.js";
 
 const seenSignaturesKey = Symbol("seenMessageSignatures");
@@ -6,7 +5,7 @@ const seenSignaturesKey = Symbol("seenMessageSignatures");
 function getSeenSignatures(result: SingleResult): Set<string> {
   const r = result as any;
   if (!r[seenSignaturesKey]) {
-    r[seenSignaturesKey] = new Set<string>();
+    r[seenSignaturesKey] = new Set();
   }
   return r[seenSignaturesKey];
 }
@@ -14,7 +13,7 @@ function getSeenSignatures(result: SingleResult): Set<string> {
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
+  const entries = Object.entries(value).sort(([a], [b]) => a.localeCompare(b));
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(",")}}`;
 }
 
@@ -22,12 +21,8 @@ export function getMessageSignature(message: unknown): string {
   return stableStringify(message);
 }
 
-// ---------------------------------------------------------------------------
-// Event processing
-// ---------------------------------------------------------------------------
-
 function updateMetadata(result: SingleResult, message: any): void {
-  if (!message || message.role !== "assistant") return;
+  if (message.role !== "assistant") return;
   if (!result.model && message.model) result.model = message.model;
   if (message.stopReason) result.stopReason = message.stopReason;
   if (message.errorMessage) result.errorMessage = message.errorMessage;
@@ -56,7 +51,6 @@ function addAssistantMessage(result: SingleResult, message: any): boolean {
     result.usage.contextTokens = usage.totalTokens || 0;
   }
 
-  // Detect nested subagent calls from toolCall parts
   if (Array.isArray(message.content)) {
     for (const part of message.content) {
       if (
