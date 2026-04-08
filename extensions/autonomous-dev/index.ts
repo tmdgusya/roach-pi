@@ -346,7 +346,7 @@ function getPreferredWorkerModel(): string | undefined {
   return sessionModel?.name || (sessionModel ? `${sessionModel.provider}/${sessionModel.id}` : undefined) || inherited.fallbackModel;
 }
 
-async function resolveWorkerAgentConfig(agent: AgentConfig): Promise<AgentConfig | { error: string }> {
+export async function resolveWorkerAgentConfig(agent: AgentConfig): Promise<AgentConfig | { error: string }> {
   const preferredModel = agent.model || getPreferredWorkerModel();
   const sessionModel = activeSessionContext?.model;
 
