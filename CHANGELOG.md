@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.2](https://github.com/tmdgusya/roach-pi/compare/v1.6.1...v1.6.2) (2026-04-09)
+
+### Bug Fixes
+
+* **agentic-harness:** make subagent shutdown accounting truthful ([6945420](https://github.com/tmdgusya/roach-pi/commit/69454203209ed2c84b32711aa1f58f2a69d0427e))
+* **autonomous-dev:** add missing tsconfig and fix test type errors ([a9bea96](https://github.com/tmdgusya/roach-pi/commit/a9bea9667fff110deb4b9af853a55ffd367a11dc))
+* **autonomous-dev:** preserve default signal termination behavior ([a6ff810](https://github.com/tmdgusya/roach-pi/commit/a6ff8108614acb6faef1c79c86a6da1df3f7d99c))
+* **autonomous-dev:** reap nested worker processes ([0670a61](https://github.com/tmdgusya/roach-pi/commit/0670a61b482b53996532d2b94a32e1852698d256))
+
+### Documentation
+
+* add review fixes plan for autonomous-dev process cleanup ([00e8503](https://github.com/tmdgusya/roach-pi/commit/00e850305b058618973d752471d678db6d083b73))
+
 ## [1.6.1](https://github.com/tmdgusya/roach-pi/compare/v1.6.0...v1.6.1) (2026-04-09)
 
 ### Bug Fixes
