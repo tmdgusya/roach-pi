@@ -3,6 +3,7 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { AutonomousDevOrchestrator } from "./orchestrator.js";
 import type { WorkerActivityCallback, WorkerResult } from "./types.js";
+import { flushAutonomousDevLogs } from "./logger.js";
 import { getIssueWithComments, detectRepo } from "./github.js";
 import { loadAgentsFromDir, type AgentConfig } from "../agentic-harness/agents.js";
 import { runAgent, resolveDepthConfig } from "../agentic-harness/subagent.js";
@@ -153,14 +154,31 @@ function stopUiRefreshLoop(): void {
   activeSessionContext = null;
 }
 
-function cleanupAutonomousDev(): void {
+async function cleanupAutonomousDev(): Promise<void> {
   logAutonomousDev("info", "engine.cleanup", {
     message: "Cleaning up autonomous-dev session resources",
   });
   stopUiRefreshLoop();
   if (orchestrator) {
-    orchestrator.stop();
+    const result = await orchestrator.stopAndWait();
+    logAutonomousDev("info", "engine.cleanup.result", {
+      message: "Cleanup completed",
+      details: {
+        workersAborted: result.workersAborted,
+        abortedIssueNumbers: result.abortedIssueNumbers,
+        pollingStopped: result.pollingStopped,
+        trackedIssuesCleared: result.trackedIssuesCleared,
+      },
+    });
     orchestrator = null;
+  }
+  logAutonomousDev("info", "engine.cleanup.complete", {
+    message: "Session cleanup fully complete — no autonomous work should be running",
+  });
+  try {
+    await flushAutonomousDevLogs();
+  } catch {
+    // Best-effort flush; logger may be mocked/teardown during tests
   }
 }
 
@@ -168,16 +186,23 @@ function ensureProcessCleanupHooks(): void {
   if (processCleanupRegistered) return;
   processCleanupRegistered = true;
 
-  const cleanup = () => {
-    cleanupAutonomousDev();
-  };
-
-  process.once("exit", cleanup);
-  process.once("SIGINT", () => {
-    cleanup();
+  // Synchronous cleanup for process exit (cannot await)
+  process.once("exit", () => {
+    if (orchestrator) {
+      orchestrator.stop();
+      orchestrator = null;
+    }
+    stopUiRefreshLoop();
   });
-  process.once("SIGTERM", () => {
-    cleanup();
+
+  // Async cleanup for signals (can await before exit)
+  process.once("SIGINT", async () => {
+    await cleanupAutonomousDev();
+    process.exit(130);
+  });
+  process.once("SIGTERM", async () => {
+    await cleanupAutonomousDev();
+    process.exit(143);
   });
 }
 
@@ -543,9 +568,22 @@ export default function (pi: ExtensionAPI) {
             repo: orch.getStatus().repo || undefined,
             message: "Stopping autonomous-dev via command",
           });
-          orch.stop();
+          const stopResult = orch.stop();
           updatePersistentUi(ctx, orch);
-          ctx.ui.notify("Stopped autonomous dev engine", "info");
+          const workerSummary = stopResult.workersAborted > 0
+            ? ` (aborted ${stopResult.workersAborted} worker(s): ${stopResult.abortedIssueNumbers.join(", ")})`
+            : "";
+          ctx.ui.notify(`Stopped autonomous dev engine${workerSummary}`, "info");
+          logAutonomousDev("info", "command.stop.complete", {
+            repo: orch.getStatus().repo || undefined,
+            message: `Stop confirmed${workerSummary}`,
+            details: {
+              workersAborted: stopResult.workersAborted,
+              abortedIssueNumbers: stopResult.abortedIssueNumbers,
+              pollingStopped: stopResult.pollingStopped,
+              trackedIssuesCleared: stopResult.trackedIssuesCleared,
+            },
+          });
           return;
         }
 
@@ -578,10 +616,10 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  pi.on("session_shutdown", () => {
+  pi.on("session_shutdown", async () => {
     logAutonomousDev("info", "session.shutdown", {
       message: "autonomous-dev session shutting down",
     });
-    cleanupAutonomousDev();
+    await cleanupAutonomousDev();
   });
 }

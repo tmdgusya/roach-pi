@@ -106,6 +106,18 @@ export interface OrchestratorStatus {
   recentActivities: ActivityEntry[];
 }
 
+/** Result of a stop/shutdown cleanup operation */
+export interface StopResult {
+  /** Number of workers that were aborted */
+  workersAborted: number;
+  /** Issue numbers of aborted workers */
+  abortedIssueNumbers: number[];
+  /** Whether polling was active and stopped */
+  pollingStopped: boolean;
+  /** Whether tracked issues were cleared */
+  trackedIssuesCleared: boolean;
+}
+
 export class GitHubError extends Error {
   constructor(
     message: string,
