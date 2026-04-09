@@ -293,6 +293,8 @@ export async function runAgent(opts: RunAgentOptions): Promise<SingleResult> {
     const processLogPath = extraEnv?.[SUBAGENT_PROCESS_LOG_ENV] || process.env[SUBAGENT_PROCESS_LOG_ENV];
 
     let wasAborted = false;
+    let semanticTerminationRequested = false;
+    let closeSignal: NodeJS.Signals | undefined;
     const lifecycleWrites: Promise<void>[] = [];
 
     const exitCode = await new Promise<number>((resolve) => {
@@ -425,6 +427,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<SingleResult> {
           if (graceTimer) clearTimeout(graceTimer);
           graceTimer = setTimeout(() => {
             if (!didClose && !settled && result.sawAgentEnd) {
+              semanticTerminationRequested = true;
               requestTermination("agent_end_grace_elapsed");
             }
           }, AGENT_END_GRACE_MS);
@@ -444,13 +447,16 @@ export async function runAgent(opts: RunAgentOptions): Promise<SingleResult> {
         result.stderr += chunk.toString();
       });
 
-      proc.on("close", (code) => {
+      proc.on("close", (code, signalName) => {
         didClose = true;
+        closeSignal = signalName ?? undefined;
+
         if (buffer.trim()) {
           for (const line of buffer.split("\n")) {
             if (line.trim()) flushLine(line);
           }
         }
+
         if (pid > 0) {
           emitLifecycle({
             phase: "closed",
@@ -460,10 +466,27 @@ export async function runAgent(opts: RunAgentOptions): Promise<SingleResult> {
             owner: resolvedOwnership.owner,
             pid,
             pgid,
-            exitCode: code ?? 0,
+            signal: closeSignal,
+            exitCode: code ?? null,
           });
         }
-        finish(code ?? 0);
+
+        if (code !== null) {
+          finish(code);
+          return;
+        }
+
+        if (closeSignal === "SIGTERM") {
+          finish(143);
+          return;
+        }
+
+        if (closeSignal === "SIGKILL") {
+          finish(137);
+          return;
+        }
+
+        finish(1);
       });
 
       proc.on("error", (err) => {
@@ -474,7 +497,14 @@ export async function runAgent(opts: RunAgentOptions): Promise<SingleResult> {
       if (signal) {
         abortHandler = () => {
           if (didClose || settled) return;
-          wasAborted = true;
+
+          const hasSemanticCompletion = result.sawAgentEnd && !!getFinalOutput(result.messages).trim();
+          if (hasSemanticCompletion) {
+            semanticTerminationRequested = true;
+          } else {
+            wasAborted = true;
+          }
+
           requestTermination("abort_signal_received");
         };
         if (signal.aborted) abortHandler();
@@ -485,14 +515,17 @@ export async function runAgent(opts: RunAgentOptions): Promise<SingleResult> {
     await Promise.allSettled(lifecycleWrites);
     result.exitCode = exitCode;
 
-    // Normalize: if agent completed semantically but process exited non-zero
-    if (wasAborted) {
+    const hasSemanticOutput = result.sawAgentEnd && !!getFinalOutput(result.messages).trim();
+    const endedViaSemanticReap = semanticTerminationRequested && hasSemanticOutput && (closeSignal === "SIGTERM" || closeSignal === "SIGKILL");
+
+    if (endedViaSemanticReap) {
+      result.exitCode = 0;
+      if (result.stopReason === "error") result.stopReason = undefined;
+      result.errorMessage = undefined;
+    } else if (wasAborted) {
       result.exitCode = 130;
       result.stopReason = "aborted";
       result.errorMessage = "Subagent was aborted.";
-    } else if (result.exitCode > 0 && result.sawAgentEnd && getFinalOutput(result.messages).trim()) {
-      result.exitCode = 0;
-      if (result.stopReason === "error") result.stopReason = undefined;
     } else if (result.exitCode > 0) {
       if (!result.stopReason) result.stopReason = "error";
       if (!result.errorMessage && result.stderr.trim()) result.errorMessage = result.stderr.trim();

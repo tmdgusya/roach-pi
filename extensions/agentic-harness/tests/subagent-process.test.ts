@@ -88,7 +88,7 @@ describe.runIf(process.platform !== "win32")("runAgent process ownership", () =>
 
     expect(result.exitCode).toBe(0);
     expect(state.runId).toBe("root-success-run");
-    expect(state.rootRunId).toBe("root-success-run");
+    expect(state.rootRunId).toBe(process.env.PI_SUBAGENT_ROOT_RUN_ID || "root-success-run");
 
     await waitFor(() => !isPidAlive(state.parentPid) && !isPidAlive(state.grandchildPid), 4000);
 
@@ -97,6 +97,86 @@ describe.runIf(process.platform !== "win32")("runAgent process ownership", () =>
     expect(processLog).toContain('"phase":"terminating"');
     expect(processLog).toContain('"phase":"closed"');
     expect(processLog).toContain('"runId":"root-success-run"');
+
+    const events = readFileSync(logFile, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    const closedEvent = events.find((event) => event.phase === "closed");
+    expect(closedEvent).toMatchObject({
+      phase: "closed",
+      runId: "root-success-run",
+      signal: "SIGTERM",
+      exitCode: null,
+    });
+  });
+
+  it("does not convert a post-agent_end failure into success", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "subagent-process-agent-end-fail-"));
+    tempDirs.push(tempDir);
+    const stateFile = join(tempDir, "state.json");
+
+    process.argv = [process.execPath, fixtureScript];
+
+    const result = await runAgent({
+      agent: {
+        name: "fixture",
+        description: "fixture agent",
+        filePath: fixtureScript,
+        source: "project",
+        systemPrompt: "",
+        tools: [],
+      },
+      agentName: "fixture",
+      task: "agent-end-fail",
+      cwd: tempDir,
+      depthConfig: resolveDepthConfig(),
+      ownership: { runId: "root-agent-end-fail", owner: "test-suite" },
+      extraEnv: {
+        FIXTURE_STATE_FILE: stateFile,
+      },
+      makeDetails: (results) => ({ mode: "single", results }),
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stopReason).toBe("error");
+  });
+
+  it("keeps semantic success when abort arrives after agent_end", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "subagent-process-late-abort-"));
+    tempDirs.push(tempDir);
+    const stateFile = join(tempDir, "state.json");
+
+    process.argv = [process.execPath, fixtureScript];
+    const controller = new AbortController();
+
+    const runPromise = runAgent({
+      agent: {
+        name: "fixture",
+        description: "fixture agent",
+        filePath: fixtureScript,
+        source: "project",
+        systemPrompt: "",
+        tools: [],
+      },
+      agentName: "fixture",
+      task: "success-hang",
+      cwd: tempDir,
+      depthConfig: resolveDepthConfig(),
+      ownership: { runId: "root-late-abort", owner: "test-suite" },
+      extraEnv: {
+        FIXTURE_STATE_FILE: stateFile,
+      },
+      signal: controller.signal,
+      makeDetails: (results) => ({ mode: "single", results }),
+    });
+
+    await waitFor(() => !!loadState(stateFile).grandchildPid, 2000);
+    controller.abort();
+    const result = await runPromise;
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stopReason).not.toBe("aborted");
   });
 
   it("kills owned descendants when aborted", async () => {

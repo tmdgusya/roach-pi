@@ -37,22 +37,20 @@ updateState({
 
 const assistantMessage = {
   role: "assistant",
-  content: [{ type: "text", text: mode === "success-hang" ? "fixture complete" : "fixture waiting" }],
+  content: [{ type: "text", text: mode === "success-hang" ? "fixture complete" : mode === "agent-end-fail" ? "fixture failed after completion" : "fixture waiting" }],
 };
 
 console.log(JSON.stringify({ type: "message_end", message: assistantMessage }));
-if (mode === "success-hang") {
+if (mode === "success-hang" || mode === "agent-end-fail") {
   console.log(JSON.stringify({ type: "agent_end", messages: [assistantMessage] }));
 }
 
-const keepAlive = setInterval(() => {
-  // keep process and descendant alive until parent kills the process group
-}, 1000);
-
-const shutdown = () => {
-  clearInterval(keepAlive);
-  process.exit(0);
-};
-
-process.on("SIGTERM", shutdown);
-process.on("SIGINT", shutdown);
+if (mode === "agent-end-fail") {
+  setTimeout(() => {
+    process.exit(1);
+  }, 25);
+} else {
+  setInterval(() => {
+    // keep process and descendant alive until parent kills the process group
+  }, 1000);
+}
