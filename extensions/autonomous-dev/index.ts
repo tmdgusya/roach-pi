@@ -343,7 +343,10 @@ export function buildWorkerTask(issueNumber: number, repo: string, issueContext:
 function getPreferredWorkerModel(): string | undefined {
   const inherited = getInheritedCliArgs();
   const sessionModel = activeSessionContext?.model;
-  return sessionModel?.name || (sessionModel ? `${sessionModel.provider}/${sessionModel.id}` : undefined) || inherited.fallbackModel;
+  // Always use fully-qualified provider/id — never sessionModel.name (display name like "GPT-5.4")
+  // because bare model IDs match multiple providers (e.g. gpt-5.4 exists under 5 providers)
+  // and the child pi process picks the first match, which may lack an API key.
+  return (sessionModel ? `${sessionModel.provider}/${sessionModel.id}` : undefined) || inherited.fallbackModel;
 }
 
 export async function resolveWorkerAgentConfig(agent: AgentConfig): Promise<AgentConfig | { error: string }> {
@@ -356,7 +359,7 @@ export async function resolveWorkerAgentConfig(agent: AgentConfig): Promise<Agen
     };
   }
 
-  if (sessionModel && preferredModel === (sessionModel.name || `${sessionModel.provider}/${sessionModel.id}`)) {
+  if (sessionModel && preferredModel === `${sessionModel.provider}/${sessionModel.id}`) {
     const auth = await activeSessionContext?.modelRegistry.getApiKeyAndHeaders(sessionModel);
     if (!auth?.ok || !auth.apiKey) {
       return {

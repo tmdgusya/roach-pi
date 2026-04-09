@@ -228,3 +228,69 @@ describe("autonomous-dev extension command registration", () => {
     );
   });
 });
+
+// Regression: sessionModel.name used as --model for child pi process
+// caused "No API key found for opencode" because bare display names like "GPT-5.4"
+// match multiple providers (azure-openai-responses, opencode, etc.) and the
+// child picks the first match, which may lack an API key.
+// Fix: always use fully-qualified "provider/id" format.
+vi.mock("../../agentic-harness/runner-cli.js", () => ({
+  parseInheritedCliArgs: vi.fn(() => ({
+    extensionArgs: [],
+    alwaysProxy: [],
+    fallbackModel: undefined,
+    fallbackThinking: undefined,
+    fallbackTools: undefined,
+    fallbackNoTools: false,
+  })),
+  getInheritedCliArgs: vi.fn(() => ({
+    extensionArgs: [],
+    alwaysProxy: [],
+    fallbackModel: undefined,
+    fallbackThinking: undefined,
+    fallbackTools: undefined,
+    fallbackNoTools: false,
+  })),
+}));
+
+describe("resolveWorkerAgentConfig: provider/id regression", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.useFakeTimers();
+    delete process.env.PI_AUTONOMOUS_DEV;
+  });
+
+  afterEach(() => {
+    delete process.env.PI_AUTONOMOUS_DEV;
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("agent.model with provider/id passes through unchanged", async () => {
+    const { resolveWorkerAgentConfig } = await import("../index.js");
+    const agent = {
+      name: "test-worker",
+      source: "bundled",
+      model: "openai-codex/gpt-5.4",
+      systemPrompt: "",
+      tools: ["read", "bash"],
+    };
+    const result = (await resolveWorkerAgentConfig(agent)) as any;
+    expect(result.model).toBe("openai-codex/gpt-5.4");
+    expect(result.model).toContain("/");
+    expect(result.model).not.toBe("GPT-5.4");
+  });
+
+  it("no model and no session returns error", async () => {
+    const { resolveWorkerAgentConfig } = await import("../index.js");
+    const agent = {
+      name: "test-worker",
+      source: "bundled",
+      model: undefined,
+      systemPrompt: "",
+      tools: ["read", "bash"],
+    };
+    const result = (await resolveWorkerAgentConfig(agent)) as any;
+    expect(result.error).toContain("No active model");
+  });
+});
