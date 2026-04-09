@@ -285,9 +285,11 @@ describe("resolveWorkerAgentConfig: provider/id regression", () => {
 
   it("agent.model with provider/id passes through unchanged", async () => {
     const { resolveWorkerAgentConfig } = await import("../index.js");
-    const agent = {
+    const agent: Parameters<typeof resolveWorkerAgentConfig>[0] = {
       name: "test-worker",
-      source: "bundled",
+      description: "test worker",
+      filePath: "test.ts",
+      source: "bundled" as const,
       model: "openai-codex/gpt-5.4",
       systemPrompt: "",
       tools: ["read", "bash"],
@@ -300,9 +302,11 @@ describe("resolveWorkerAgentConfig: provider/id regression", () => {
 
   it("no model and no session returns error", async () => {
     const { resolveWorkerAgentConfig } = await import("../index.js");
-    const agent = {
+    const agent: Parameters<typeof resolveWorkerAgentConfig>[0] = {
       name: "test-worker",
-      source: "bundled",
+      description: "test worker",
+      filePath: "test.ts",
+      source: "bundled" as const,
       model: undefined,
       systemPrompt: "",
       tools: ["read", "bash"],
