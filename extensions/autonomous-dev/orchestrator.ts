@@ -6,6 +6,7 @@ import {
   WorkerActivityCallback,
   WorkerAbortSignal,
   AUTONOMOUS_LABELS,
+  StopResult,
 } from "./types.js";
 import {
   listIssuesByLabel,
@@ -76,6 +77,18 @@ export class AutonomousDevOrchestrator {
     signal?: WorkerAbortSignal
   ) => Promise<WorkerResult> = stubWorkerSpawn;
 
+  /**
+   * Set of currently in-flight worker promises, keyed by issue number.
+   * Used to await graceful termination after abort.
+   */
+  private activeWorkerPromises: Map<number, Promise<void>> = new Map();
+
+  /**
+   * Guard flag: when true, all status mutations are suppressed.
+   * Set during stop to prevent stale worker callbacks from corrupting state.
+   */
+  private statusFrozen = false;
+
   constructor(config: Partial<OrchestratorConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.status = {
@@ -121,6 +134,7 @@ export class AutonomousDevOrchestrator {
   }
 
   private updateActivity(activity: string, issueNumber: number | null = null, issueTitle: string | null = null): void {
+    if (this.statusFrozen) return;
     this.status.currentActivity = activity;
     this.status.currentIssueNumber = issueNumber;
     this.status.currentIssueTitle = issueTitle;
@@ -139,6 +153,7 @@ export class AutonomousDevOrchestrator {
 
   start(): void {
     if (this.status.isRunning) return;
+    this.statusFrozen = false;
     this.status.isRunning = true;
     this.runToken++;
     this.logEvent("engine.start", {
@@ -155,24 +170,105 @@ export class AutonomousDevOrchestrator {
     );
   }
 
-  stop(): void {
+  /**
+   * Stop the engine: abort all workers, clear polling, freeze status.
+   * Returns a StopResult describing what was cleaned up.
+   */
+  stop(): StopResult {
+    const hadPolling = this.intervalId !== null;
+    const trackedCount = this.trackedIssues.size;
+
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
+
+    // Freeze status mutations immediately to prevent stale callbacks
+    // from corrupting state after stop.
+    this.statusFrozen = true;
     this.runToken++;
     this.status.isRunning = false;
-    for (const controller of this.activeWorkerControllers.values()) {
-      controller.abort();
+
+    // Abort all active workers
+    const abortedIssueNumbers: number[] = [];
+    for (const [issueNumber, controller] of this.activeWorkerControllers.entries()) {
+      if (!controller.signal.aborted) {
+        controller.abort();
+        abortedIssueNumbers.push(issueNumber);
+        this.logEvent("worker.abort_sent", {
+          issueNumber,
+          message: "Sent abort signal to worker during stop",
+        });
+      }
     }
+
+    // Clear worker tracking but leave promises to settle naturally
+    // (they check runToken/statusFrozen and discard results)
     this.activeWorkerControllers.clear();
     this.status.activeWorkerCount = 0;
-    this.logEvent("engine.stop", {
-      message: "Stopping autonomous-dev polling loop",
-      details: { trackedIssueCount: this.trackedIssues.size },
-    });
-    this.updateActivity("stopped");
+
+    const hadTrackedIssues = trackedCount > 0;
     this.trackedIssues.clear();
+
+    // Set final stopped state
+    this.statusFrozen = false;
+    this.updateActivity("stopped");
+
+    const result: StopResult = {
+      workersAborted: abortedIssueNumbers.length,
+      abortedIssueNumbers,
+      pollingStopped: hadPolling,
+      trackedIssuesCleared: hadTrackedIssues,
+    };
+
+    this.logEvent("engine.stop", {
+      message: "Stopped autonomous-dev engine",
+      details: {
+        workersAborted: result.workersAborted,
+        abortedIssueNumbers: result.abortedIssueNumbers,
+        pollingStopped: result.pollingStopped,
+        trackedIssuesCleared: result.trackedIssuesCleared,
+      },
+    });
+
+    this.logEvent("engine.stop.complete", {
+      message: "Cleanup verification complete — no autonomous work should be running",
+    });
+
+    return result;
+  }
+
+  /**
+   * Stop the engine and wait for all in-flight worker promises to settle.
+   * Use this for session shutdown to guarantee no background work continues.
+   */
+  async stopAndWait(timeoutMs: number = 5_000): Promise<StopResult> {
+    const result = this.stop();
+
+    if (this.activeWorkerPromises.size > 0) {
+      const remaining = Array.from(this.activeWorkerPromises.entries());
+      this.logEvent("engine.stop.waiting", {
+        message: `Waiting for ${remaining.length} in-flight worker(s) to settle`,
+        details: { issueNumbers: remaining.map(([n]) => n) },
+      });
+
+      const allSettled = Promise.allSettled(remaining.map(([, p]) => p));
+      const race = Promise.race([
+        allSettled,
+        new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
+      ]);
+      await race;
+
+      this.logEvent("engine.stop.workers_settled", {
+        message: "All in-flight workers have settled (or timed out waiting)",
+        details: {
+          remainingPromises: this.activeWorkerPromises.size,
+        },
+      });
+      this.activeWorkerPromises.clear();
+    }
+
+    return result;
   }
 
   getStatus(): OrchestratorStatus {
@@ -235,7 +331,7 @@ export class AutonomousDevOrchestrator {
         return;
       }
 
-      await this.pickupReadyIssues();
+      await this.pickupReadyIssues(runToken);
       await this.checkClarificationResponses();
 
       this.status.lastPollCompletedAt = new Date().toISOString();
@@ -270,7 +366,7 @@ export class AutonomousDevOrchestrator {
     }
   }
 
-  private async pickupReadyIssues(): Promise<void> {
+  private async pickupReadyIssues(pollRunToken: number): Promise<void> {
     const issues = await listIssuesByLabel(
       this.config.repo,
       AUTONOMOUS_LABELS.READY,
@@ -288,6 +384,15 @@ export class AutonomousDevOrchestrator {
     });
 
     for (const issue of issues) {
+      // Check if engine was stopped between iterations
+      if (pollRunToken !== this.runToken) {
+        this.logEvent("issues.pickup.stopped", {
+          message: "Abandoning issue pickup because engine was stopped",
+          details: { remainingIssueNumbers: issues.slice(issues.indexOf(issue)).map((i) => i.number) },
+        });
+        break;
+      }
+
       if (this.trackedIssues.has(issue.number)) {
         this.logEvent("issue.skip_tracked", {
           issueNumber: issue.number,
@@ -346,129 +451,136 @@ export class AutonomousDevOrchestrator {
       }, workerTimeoutMs);
     }
 
-    try {
-      const trackedTitle = tracked.title;
-      this.logEvent("worker.started", {
-        issueNumber,
-        issueTitle: trackedTitle,
-        message: "Launching autonomous worker",
-        details: workerTimeoutMs > 0 ? { workerTimeoutMs } : undefined,
-      });
-      this.updateActivity("processing issue", issueNumber, trackedTitle);
-      const result = await this.workerSpawner(
-        issueNumber,
-        this.config,
-        (activity) => {
-          if (controller.signal.aborted || runToken !== this.runToken) return;
-          this.logEvent("worker.activity", {
+    const workerPromise = (async () => {
+      try {
+        const trackedTitle = tracked.title;
+        this.logEvent("worker.started", {
+          issueNumber,
+          issueTitle: trackedTitle,
+          message: "Launching autonomous worker",
+          details: workerTimeoutMs > 0 ? { workerTimeoutMs } : undefined,
+        });
+        this.updateActivity("processing issue", issueNumber, trackedTitle);
+        const result = await this.workerSpawner(
+          issueNumber,
+          this.config,
+          (activity) => {
+            if (this.statusFrozen) return;
+            if (controller.signal.aborted || runToken !== this.runToken) return;
+            this.logEvent("worker.activity", {
+              issueNumber,
+              issueTitle: trackedTitle,
+              message: activity,
+            });
+            this.updateActivity(activity, issueNumber, trackedTitle);
+          },
+          controller.signal
+        );
+
+        if (timeoutId !== null) clearTimeout(timeoutId);
+
+        if (timedOut && runToken === this.runToken) {
+          this.logEvent("worker.timeout.recovering", {
+            level: "warn",
             issueNumber,
             issueTitle: trackedTitle,
-            message: activity,
+            message: "Recovering from worker timeout",
           });
-          this.updateActivity(activity, issueNumber, trackedTitle);
-        },
-        controller.signal
-      );
+          tracked.state = "failed";
+          this.status.stats.totalFailed++;
+          this.status.stats.totalTimedOut++;
+          this.status.stats.totalProcessed++;
+          await postComment(
+            this.config.repo,
+            issueNumber,
+            `⏱️ **Worker timed out** after ${workerTimeoutMs / 1000}s. Marking issue as failed.`
+          );
+          await this.handleFailure(issueNumber);
+          return;
+        }
 
-      if (timeoutId !== null) clearTimeout(timeoutId);
+        if (this.statusFrozen || controller.signal.aborted || runToken !== this.runToken) {
+          this.logEvent("worker.aborted", {
+            issueNumber,
+            issueTitle: trackedTitle,
+            message: "Discarding worker result after stop or superseding run",
+          });
+          return;
+        }
 
-      if (timedOut && runToken === this.runToken) {
-        this.logEvent("worker.timeout.recovering", {
-          level: "warn",
+        this.logEvent("worker.result", {
           issueNumber,
           issueTitle: trackedTitle,
-          message: "Recovering from worker timeout",
+          message: `Worker returned ${result.status}`,
+          details: result.status === "completed"
+            ? { prUrl: result.prUrl, summary: result.summary }
+            : result.status === "needs-clarification"
+              ? { question: result.question }
+              : { error: result.error },
         });
-        tracked.state = "failed";
-        this.status.stats.totalFailed++;
-        this.status.stats.totalTimedOut++;
-        this.status.stats.totalProcessed++;
-        await postComment(
-          this.config.repo,
-          issueNumber,
-          `⏱️ **Worker timed out** after ${workerTimeoutMs / 1000}s. Marking issue as failed.`
+        await this.handleWorkerResult(issueNumber, result);
+      } catch (err) {
+        if (timeoutId !== null) clearTimeout(timeoutId);
+
+        if (timedOut && runToken === this.runToken) {
+          this.logEvent("worker.timeout.recovering", {
+            level: "warn",
+            issueNumber,
+            issueTitle: tracked.title,
+            message: "Recovering from worker timeout (worker threw)",
+            details: { error: describeError(err) },
+          });
+          tracked.state = "failed";
+          this.status.stats.totalFailed++;
+          this.status.stats.totalTimedOut++;
+          this.status.stats.totalProcessed++;
+          await postComment(
+            this.config.repo,
+            issueNumber,
+            `⏱️ **Worker timed out** after ${workerTimeoutMs / 1000}s. Marking issue as failed.`
+          );
+          await this.handleFailure(issueNumber);
+          return;
+        }
+
+        if (this.statusFrozen || controller.signal.aborted || runToken !== this.runToken) {
+          this.logEvent("worker.aborted", {
+            issueNumber,
+            issueTitle: tracked.title,
+            message: "Worker aborted after stop or superseding run",
+            details: { error: describeError(err) },
+          });
+          return;
+        }
+
+        console.error(
+          `[autonomous-dev] Worker failed for #${issueNumber}:`,
+          err
         );
-        await this.handleFailure(issueNumber);
-        return;
-      }
-
-      if (controller.signal.aborted || runToken !== this.runToken) {
-        this.logEvent("worker.aborted", {
-          issueNumber,
-          issueTitle: trackedTitle,
-          message: "Discarding worker result after stop or superseding run",
-        });
-        return;
-      }
-
-      this.logEvent("worker.result", {
-        issueNumber,
-        issueTitle: trackedTitle,
-        message: `Worker returned ${result.status}`,
-        details: result.status === "completed"
-          ? { prUrl: result.prUrl, summary: result.summary }
-          : result.status === "needs-clarification"
-            ? { question: result.question }
-            : { error: result.error },
-      });
-      await this.handleWorkerResult(issueNumber, result);
-    } catch (err) {
-      if (timeoutId !== null) clearTimeout(timeoutId);
-
-      if (timedOut && runToken === this.runToken) {
-        this.logEvent("worker.timeout.recovering", {
-          level: "warn",
+        this.logEvent("worker.failed", {
+          level: "error",
           issueNumber,
           issueTitle: tracked.title,
-          message: "Recovering from worker timeout (worker threw)",
+          message: "Worker threw before returning a result",
           details: { error: describeError(err) },
         });
         tracked.state = "failed";
         this.status.stats.totalFailed++;
-        this.status.stats.totalTimedOut++;
         this.status.stats.totalProcessed++;
-        await postComment(
-          this.config.repo,
-          issueNumber,
-          `⏱️ **Worker timed out** after ${workerTimeoutMs / 1000}s. Marking issue as failed.`
-        );
         await this.handleFailure(issueNumber);
-        return;
+      } finally {
+        if (timeoutId !== null) clearTimeout(timeoutId);
+        const active = this.activeWorkerControllers.get(issueNumber);
+        if (active === controller) {
+          this.activeWorkerControllers.delete(issueNumber);
+        }
+        this.status.activeWorkerCount = this.activeWorkerControllers.size;
+        this.activeWorkerPromises.delete(issueNumber);
       }
+    })();
 
-      if (controller.signal.aborted || runToken !== this.runToken) {
-        this.logEvent("worker.aborted", {
-          issueNumber,
-          issueTitle: tracked.title,
-          message: "Worker aborted after stop or superseding run",
-          details: { error: describeError(err) },
-        });
-        return;
-      }
-
-      console.error(
-        `[autonomous-dev] Worker failed for #${issueNumber}:`,
-        err
-      );
-      this.logEvent("worker.failed", {
-        level: "error",
-        issueNumber,
-        issueTitle: tracked.title,
-        message: "Worker threw before returning a result",
-        details: { error: describeError(err) },
-      });
-      tracked.state = "failed";
-      this.status.stats.totalFailed++;
-      this.status.stats.totalProcessed++;
-      await this.handleFailure(issueNumber);
-    } finally {
-      if (timeoutId !== null) clearTimeout(timeoutId);
-      const active = this.activeWorkerControllers.get(issueNumber);
-      if (active === controller) {
-        this.activeWorkerControllers.delete(issueNumber);
-      }
-      this.status.activeWorkerCount = this.activeWorkerControllers.size;
-    }
+    this.activeWorkerPromises.set(issueNumber, workerPromise);
+    await workerPromise;
   }
 
   private async handleWorkerResult(
