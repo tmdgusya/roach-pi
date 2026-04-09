@@ -140,6 +140,23 @@ describe("autonomous-dev extension command registration", () => {
     });
   });
 
+  it("re-raises SIGINT after cleanup so process termination semantics are preserved", async () => {
+    process.env.PI_AUTONOMOUS_DEV = "1";
+    const onceSpy = vi.spyOn(process, "once");
+    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true as any);
+    const { default: registerExtension } = await import("../index.js");
+    const pi = createPiMock();
+
+    registerExtension(pi);
+
+    const sigintHandler = onceSpy.mock.calls.find(([event]) => event === "SIGINT")?.[1] as (() => void) | undefined;
+    expect(sigintHandler).toBeTypeOf("function");
+
+    sigintHandler?.();
+
+    expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGINT");
+  });
+
   it("installs persistent footer status and below-editor widget on session start", async () => {
     process.env.PI_AUTONOMOUS_DEV = "1";
     const { default: registerExtension } = await import("../index.js");

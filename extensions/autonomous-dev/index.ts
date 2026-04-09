@@ -165,20 +165,25 @@ function cleanupAutonomousDev(): void {
   }
 }
 
+function cleanupAndReraise(signalName: NodeJS.Signals): void {
+  cleanupAutonomousDev();
+  process.kill(process.pid, signalName);
+}
+
 function ensureProcessCleanupHooks(): void {
   if (processCleanupRegistered) return;
   processCleanupRegistered = true;
 
-  const cleanup = () => {
+  process.once("exit", () => {
     cleanupAutonomousDev();
-  };
-
-  process.once("exit", cleanup);
-  process.once("SIGINT", () => {
-    cleanup();
   });
+
+  process.once("SIGINT", () => {
+    cleanupAndReraise("SIGINT");
+  });
+
   process.once("SIGTERM", () => {
-    cleanup();
+    cleanupAndReraise("SIGTERM");
   });
 }
 
