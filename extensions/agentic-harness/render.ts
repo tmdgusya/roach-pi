@@ -265,10 +265,6 @@ function renderSingleResult(
   return new Text(text, 0, 0);
 }
 
-// ---------------------------------------------------------------------------
-// Parallel-mode result
-// ---------------------------------------------------------------------------
-
 function renderParallelResult(
   details: SubagentDetails,
   expanded: boolean,
