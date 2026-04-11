@@ -43,6 +43,8 @@ export default function (pi: ExtensionAPI) {
 
   const DIRECT_INPUT_OPTION = "직접 입력하기";
 
+  const depthConfig = resolveDepthConfig();
+
   const AskUserQuestionParams = Type.Object({
     question: Type.String({
       description: "The question to ask the user. The agent generates this dynamically based on context.",
@@ -65,60 +67,65 @@ export default function (pi: ExtensionAPI) {
     ),
   });
 
-  pi.registerTool({
-    name: "ask_user_question",
-    label: "Ask User Question",
-    description:
-      "Ask the user a question when the agent needs clarification. The agent composes the question and optional choices dynamically. Returns the user's answer as text.",
-    promptSnippet:
-      "Ask the user a clarifying question with optional multiple-choice answers",
-    promptGuidelines: [
-      "Use ask_user_question whenever you encounter ambiguity, unclear scope, or need user preference.",
-      "Generate the question and choices yourself based on the current context — do not rely on predefined templates.",
-      "Offer concrete choices (A/B/C style) when the options are enumerable. Omit choices for open-ended questions.",
-      "Ask one focused question at a time. Do not bundle multiple questions.",
-      "After receiving an answer, decide whether further clarification is needed or proceed with the task.",
-    ],
-    parameters: AskUserQuestionParams,
-    execute: async (toolCallId, params, signal, onUpdate, ctx) => {
-      const { question, choices, placeholder, defaultValue } = params;
+  // ask_user_question is only available to the root session. Subagent
+  // processes must not be able to call it — otherwise a subagent ends up
+  // asking itself questions and answering them, since subagents run
+  // non-interactively and have no user at the other end.
+  if (depthConfig.currentDepth === 0) {
+    pi.registerTool({
+      name: "ask_user_question",
+      label: "Ask User Question",
+      description:
+        "Ask the user a question when the agent needs clarification. The agent composes the question and optional choices dynamically. Returns the user's answer as text.",
+      promptSnippet:
+        "Ask the user a clarifying question with optional multiple-choice answers",
+      promptGuidelines: [
+        "Use ask_user_question whenever you encounter ambiguity, unclear scope, or need user preference.",
+        "Generate the question and choices yourself based on the current context — do not rely on predefined templates.",
+        "Offer concrete choices (A/B/C style) when the options are enumerable. Omit choices for open-ended questions.",
+        "Ask one focused question at a time. Do not bundle multiple questions.",
+        "After receiving an answer, decide whether further clarification is needed or proceed with the task.",
+      ],
+      parameters: AskUserQuestionParams,
+      execute: async (toolCallId, params, signal, onUpdate, ctx) => {
+        const { question, choices, placeholder, defaultValue } = params;
 
-      let answer: string | undefined;
+        let answer: string | undefined;
 
-      if (choices && choices.length > 0) {
-        const withDirect = choices.includes(DIRECT_INPUT_OPTION)
-          ? choices
-          : [...choices, DIRECT_INPUT_OPTION];
+        if (choices && choices.length > 0) {
+          const withDirect = choices.includes(DIRECT_INPUT_OPTION)
+            ? choices
+            : [...choices, DIRECT_INPUT_OPTION];
 
-        answer = await ctx.ui.select(question, withDirect, { signal });
+          answer = await ctx.ui.select(question, withDirect, { signal });
 
-        if (answer === DIRECT_INPUT_OPTION) {
+          if (answer === DIRECT_INPUT_OPTION) {
+            answer = await ctx.ui.input(question, placeholder || defaultValue, {
+              signal,
+            });
+          }
+        } else {
           answer = await ctx.ui.input(question, placeholder || defaultValue, {
             signal,
           });
         }
-      } else {
-        answer = await ctx.ui.input(question, placeholder || defaultValue, {
-          signal,
-        });
-      }
 
-      if (answer === undefined) {
+        if (answer === undefined) {
+          return {
+            content: [{ type: "text", text: "User cancelled the question." }],
+            details: undefined,
+          };
+        }
+
         return {
-          content: [{ type: "text", text: "User cancelled the question." }],
+          content: [{ type: "text", text: answer }],
           details: undefined,
         };
-      }
-
-      return {
-        content: [{ type: "text", text: answer }],
-        details: undefined,
-      };
-    },
-  });
+      },
+    });
+  }
 
   const HEARTBEAT_MS = 1000;
-  const depthConfig = resolveDepthConfig();
 
   const TaskItem = Type.Object({
     agent: Type.String({ description: "Name of the agent to invoke" }),

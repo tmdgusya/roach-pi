@@ -35,6 +35,20 @@ describe("Extension Registration", () => {
     expect(tool.promptGuidelines.length).toBeGreaterThan(0);
   });
 
+  it("should NOT register ask_user_question tool in subagent context", () => {
+    const prevDepth = process.env.PI_SUBAGENT_DEPTH;
+    process.env.PI_SUBAGENT_DEPTH = "1";
+    try {
+      const { mockPi, tools } = createMockPi();
+      extension(mockPi);
+
+      expect(tools.get("ask_user_question")).toBeUndefined();
+    } finally {
+      if (prevDepth === undefined) delete process.env.PI_SUBAGENT_DEPTH;
+      else process.env.PI_SUBAGENT_DEPTH = prevDepth;
+    }
+  });
+
   it("should register subagent tool", () => {
     const { mockPi, tools } = createMockPi();
     extension(mockPi);
