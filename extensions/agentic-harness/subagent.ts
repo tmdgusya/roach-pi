@@ -11,8 +11,8 @@ import { emptyUsage, getFinalOutput } from "./types.js";
 import { processPiJsonLine } from "./runner-events.js";
 import { getInheritedCliArgs } from "./runner-cli.js";
 
-export const MAX_PARALLEL_TASKS = 8;
-export const MAX_CONCURRENCY = 4;
+export const MAX_PARALLEL_TASKS = 12;
+export const MAX_CONCURRENCY = 10;
 const KILL_TIMEOUT_MS = 5000;
 const AGENT_END_GRACE_MS = 250;
 

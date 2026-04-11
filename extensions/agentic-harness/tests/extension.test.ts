@@ -58,7 +58,7 @@ describe("Extension Registration", () => {
     expect(tool.name).toBe("subagent");
     expect(tool.promptSnippet).toBeDefined();
     expect(tool.promptGuidelines).toBeDefined();
-    expect(tool.promptGuidelines.length).toBe(7);
+    expect(tool.promptGuidelines.length).toBe(8);
     expect(tool.renderCall).toBeTypeOf("function");
     expect(tool.renderResult).toBeTypeOf("function");
   });

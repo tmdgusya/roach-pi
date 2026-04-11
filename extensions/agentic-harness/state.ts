@@ -2,7 +2,7 @@ import { readFile, writeFile, mkdir } from "fs/promises";
 import { dirname } from "path";
 
 export interface ExtensionState {
-  phase: "idle" | "clarifying" | "planning" | "ultraplanning";
+  phase: "idle" | "clarifying" | "planning" | "ultraplanning" | "reviewing" | "ultrareviewing";
   activeGoalDocument: string | null;
 }
 
