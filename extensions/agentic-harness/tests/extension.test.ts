@@ -63,7 +63,7 @@ describe("Extension Registration", () => {
     expect(tool.renderResult).toBeTypeOf("function");
   });
 
-  it("should register all commands", () => {
+  it("should register all root-session commands", () => {
     const { mockPi, commands } = createMockPi();
     extension(mockPi);
 
@@ -72,6 +72,23 @@ describe("Extension Registration", () => {
     expect(commands.has("ultraplan")).toBe(true);
     expect(commands.has("ask")).toBe(true);
     expect(commands.has("reset-phase")).toBe(true);
+  });
+
+  it("should NOT register ask command in subagent context", () => {
+    const prevDepth = process.env.PI_SUBAGENT_DEPTH;
+    process.env.PI_SUBAGENT_DEPTH = "1";
+    try {
+      const { mockPi, commands } = createMockPi();
+      extension(mockPi);
+
+      expect(commands.has("ask")).toBe(false);
+      expect(commands.has("clarify")).toBe(true);
+      expect(commands.has("plan")).toBe(true);
+      expect(commands.has("ultraplan")).toBe(true);
+    } finally {
+      if (prevDepth === undefined) delete process.env.PI_SUBAGENT_DEPTH;
+      else process.env.PI_SUBAGENT_DEPTH = prevDepth;
+    }
   });
 
   it("should register event handlers", () => {
@@ -206,6 +223,36 @@ describe("before_agent_start Event", () => {
     expect(result?.systemPrompt).toContain("base");
     expect(result?.systemPrompt).toContain("## Delegation Guards");
     expect(result?.systemPrompt).toContain("## Available Subagents");
+  });
+
+  it("should avoid ask_user_question guidance in subagent planning context", async () => {
+    const prevDepth = process.env.PI_SUBAGENT_DEPTH;
+    process.env.PI_SUBAGENT_DEPTH = "1";
+    try {
+      const { mockPi, events, commands } = createMockPi();
+      extension(mockPi);
+
+      const plan = commands.get("plan");
+      await plan.handler("", {
+        ui: {
+          confirm: vi.fn().mockResolvedValue(true),
+          setStatus: vi.fn(),
+        },
+      } as any);
+
+      const handlers = events.get("before_agent_start")!;
+      const result = await handlers[0](
+        { type: "before_agent_start", prompt: "test", systemPrompt: "base" },
+        { cwd: "." } as any
+      );
+
+      expect(result?.systemPrompt).toContain("Active Workflow: Plan Crafting");
+      expect(result?.systemPrompt).not.toContain("ask_user_question");
+      expect(result?.systemPrompt).toContain("request root-session clarification");
+    } finally {
+      if (prevDepth === undefined) delete process.env.PI_SUBAGENT_DEPTH;
+      else process.env.PI_SUBAGENT_DEPTH = prevDepth;
+    }
   });
 });
 

@@ -44,6 +44,7 @@ export default function (pi: ExtensionAPI) {
   const DIRECT_INPUT_OPTION = "직접 입력하기";
 
   const depthConfig = resolveDepthConfig();
+  const isRootSession = depthConfig.currentDepth === 0;
 
   const AskUserQuestionParams = Type.Object({
     question: Type.String({
@@ -71,7 +72,7 @@ export default function (pi: ExtensionAPI) {
   // processes must not be able to call it — otherwise a subagent ends up
   // asking itself questions and answering them, since subagents run
   // non-interactively and have no user at the other end.
-  if (depthConfig.currentDepth === 0) {
+  if (isRootSession) {
     pi.registerTool({
       name: "ask_user_question",
       label: "Ask User Question",
@@ -466,12 +467,22 @@ export default function (pi: ExtensionAPI) {
     };
   });
 
+  const clarificationQuestionRule = isRootSession
+    ? "- Ask ONE question per message using the ask_user_question tool."
+    : "- Do not ask the user questions directly. If information is missing, state the gap clearly in your output.";
+  const planningAmbiguityRule = isRootSession
+    ? "- Use ask_user_question if you need to resolve any remaining ambiguity."
+    : "- If ambiguity remains, state it explicitly and request root-session clarification in your output.";
+  const ultraplanningTradeoffRule = isRootSession
+    ? "- Use ask_user_question if you need user input on trade-offs."
+    : "- If trade-off input is missing, document the trade-off and recommend what should be clarified by the root session.";
+
   const PHASE_GUIDANCE: Record<WorkflowPhase, string> = {
     idle: "",
     clarifying: [
       "\n\n## Active Workflow: Clarification",
       "You are in agentic-clarification mode. Follow the agentic-clarification skill rules strictly:",
-      "- Ask ONE question per message using the ask_user_question tool.",
+      clarificationQuestionRule,
       "- Generate questions and choices dynamically based on context — no predefined templates.",
       "- Use the subagent tool with agent 'explorer' to investigate the codebase in parallel with user Q&A.",
       "- After each answer, update 'what we've established so far' and assess remaining ambiguity.",
@@ -483,7 +494,7 @@ export default function (pi: ExtensionAPI) {
       "You are in agentic-plan-crafting mode. Follow the agentic-plan-crafting skill rules strictly:",
       "- Write an executable implementation plan from the current context.",
       "- Every step must be executable — no placeholders.",
-      "- Use ask_user_question if you need to resolve any remaining ambiguity.",
+      planningAmbiguityRule,
       "- End with a Self-Review before presenting the plan.",
     ].join("\n"),
     ultraplanning: [
@@ -492,7 +503,7 @@ export default function (pi: ExtensionAPI) {
       "- Compose a Problem Brief from the current context.",
       "- Dispatch all 5 reviewer agents in parallel using the subagent tool's parallel mode: reviewer-feasibility, reviewer-architecture, reviewer-risk, reviewer-dependency, reviewer-user-value.",
       "- Synthesize all reviewer findings into a milestone DAG.",
-      "- Use ask_user_question if you need user input on trade-offs.",
+      ultraplanningTradeoffRule,
     ].join("\n"),
   };
 
@@ -665,8 +676,12 @@ export default function (pi: ExtensionAPI) {
       ctx.ui.setStatus("harness", "Clarification in progress...");
 
       const prompt = topic
-        ? `The user wants to clarify the following request: "${topic}"\n\nBegin the agentic-clarification process. Follow the agentic-clarification skill rules. Ask ONE question using the ask_user_question tool. Use the subagent tool with agent 'explorer' to investigate relevant parts of the codebase in parallel.`
-        : `The user wants to start an agentic-clarification session for their current task.\n\nBegin the agentic-clarification process. Follow the agentic-clarification skill rules. Ask ONE question using the ask_user_question tool to understand what the user wants to accomplish. Use the subagent tool with agent 'explorer' to investigate the codebase in parallel.`;
+        ? isRootSession
+          ? `The user wants to clarify the following request: "${topic}"\n\nBegin the agentic-clarification process. Follow the agentic-clarification skill rules. Ask ONE question using the ask_user_question tool. Use the subagent tool with agent 'explorer' to investigate relevant parts of the codebase in parallel.`
+          : `The user wants to clarify the following request: "${topic}"\n\nBegin the agentic-clarification process. Follow the agentic-clarification skill rules. Do not ask the user questions directly. If information is missing, state the missing information clearly in your output. Use the subagent tool with agent 'explorer' to investigate relevant parts of the codebase in parallel.`
+        : isRootSession
+          ? `The user wants to start an agentic-clarification session for their current task.\n\nBegin the agentic-clarification process. Follow the agentic-clarification skill rules. Ask ONE question using the ask_user_question tool to understand what the user wants to accomplish. Use the subagent tool with agent 'explorer' to investigate the codebase in parallel.`
+          : `The user wants to start an agentic-clarification session for their current task.\n\nBegin the agentic-clarification process. Follow the agentic-clarification skill rules. Do not ask the user questions directly. If information is missing, state the missing information clearly in your output. Use the subagent tool with agent 'explorer' to investigate the codebase in parallel.`;
 
       pi.sendUserMessage(prompt);
     },
@@ -688,8 +703,12 @@ export default function (pi: ExtensionAPI) {
 
       const topic = args?.trim() || "";
       const prompt = topic
-        ? `Create an executable implementation plan for: "${topic}"\n\nFollow the agentic-plan-crafting skill rules. If a Context Brief exists from a previous agentic-clarification, use it as input. If not, use the ask_user_question tool to confirm goal, scope, and tech stack before writing the plan.`
-        : `Create an executable implementation plan for the current task.\n\nFollow the agentic-plan-crafting skill rules. If a Context Brief exists from a previous agentic-clarification, use it as input. If not, use the ask_user_question tool to confirm goal, scope, and tech stack before writing the plan.`;
+        ? isRootSession
+          ? `Create an executable implementation plan for: "${topic}"\n\nFollow the agentic-plan-crafting skill rules. If a Context Brief exists from a previous agentic-clarification, use it as input. If not, use the ask_user_question tool to confirm goal, scope, and tech stack before writing the plan.`
+          : `Create an executable implementation plan for: "${topic}"\n\nFollow the agentic-plan-crafting skill rules. If a Context Brief exists from a previous agentic-clarification, use it as input. If not, state any missing goal, scope, or tech-stack information explicitly in the plan assumptions before writing the plan.`
+        : isRootSession
+          ? `Create an executable implementation plan for the current task.\n\nFollow the agentic-plan-crafting skill rules. If a Context Brief exists from a previous agentic-clarification, use it as input. If not, use the ask_user_question tool to confirm goal, scope, and tech stack before writing the plan.`
+          : `Create an executable implementation plan for the current task.\n\nFollow the agentic-plan-crafting skill rules. If a Context Brief exists from a previous agentic-clarification, use it as input. If not, state any missing goal, scope, or tech-stack information explicitly in the plan assumptions before writing the plan.`;
 
       pi.sendUserMessage(prompt);
     },
@@ -718,24 +737,26 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  pi.registerCommand("ask", {
-    description: "Manual smoke test for the ask_user_question tool",
-    handler: async (args, ctx) => {
-      const topic = args?.trim() || "Ask me one focused question using the ask_user_question tool.";
-      const confirmed = await ctx.ui.confirm(
-        "Run /ask",
-        "The agent will send a manual prompt that requires one ask_user_question tool call.\n\nProceed?"
-      );
-      if (!confirmed) return;
+  if (isRootSession) {
+    pi.registerCommand("ask", {
+      description: "Manual smoke test for the ask_user_question tool",
+      handler: async (args, ctx) => {
+        const topic = args?.trim() || "Ask me one focused question using the ask_user_question tool.";
+        const confirmed = await ctx.ui.confirm(
+          "Run /ask",
+          "The agent will send a manual prompt that requires one ask_user_question tool call.\n\nProceed?"
+        );
+        if (!confirmed) return;
 
-      currentPhase = "idle";
-      ctx.ui.setStatus("harness", "Manual ask_user_question test in progress...");
+        currentPhase = "idle";
+        ctx.ui.setStatus("harness", "Manual ask_user_question test in progress...");
 
-      pi.sendUserMessage(
-        `Manual tool test: use the ask_user_question tool exactly once, then stop. User context: "${topic}"`
-      );
-    },
-  });
+        pi.sendUserMessage(
+          `Manual tool test: use the ask_user_question tool exactly once, then stop. User context: "${topic}"`
+        );
+      },
+    });
+  }
 
   const setupHandler = async (_args: string, ctx: any) => {
     const settingsPath = join(homedir(), ".pi", "agent", "settings.json");
