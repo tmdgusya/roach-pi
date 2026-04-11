@@ -125,6 +125,41 @@ describe('fff-search extension', () => {
     expect(finder.waitForScan).toHaveBeenCalledWith(15000);
   });
 
+  it('installs the FFF editor wrapper by default on session start', async () => {
+    const { mockPi, events } = createMockPi();
+    extension(mockPi);
+
+    const ctx: any = {
+      cwd: '/repo',
+      ui: {
+        setEditorComponent: vi.fn(),
+        notify: vi.fn(),
+      },
+    };
+
+    await events.get('session_start')?.[0]?.({ type: 'session_start' }, ctx);
+
+    expect(ctx.ui.setEditorComponent).toHaveBeenCalledWith(expect.any(Function));
+  });
+
+  it('disables editor replacement in tools-only mode', async () => {
+    const { mockPi, events } = createMockPi();
+    mockPi.getFlag.mockReturnValue('tools-only');
+    extension(mockPi);
+
+    const ctx: any = {
+      cwd: '/repo',
+      ui: {
+        setEditorComponent: vi.fn(),
+        notify: vi.fn(),
+      },
+    };
+
+    await events.get('session_start')?.[0]?.({ type: 'session_start' }, ctx);
+
+    expect(ctx.ui.setEditorComponent).toHaveBeenCalledWith(undefined);
+  });
+
   it('find delegates to fileSearch and returns relative paths', async () => {
     finder.fileSearch.mockReturnValue({
       ok: true,

@@ -374,6 +374,22 @@
           </div>
         </div>
 
+        <div class="card">
+          <span class="feature-icon">◆</span>
+          <div class="feature-title">
+            <span data-lang="en">FFF Search Engine</span>
+            <span data-lang="ko">FFF 검색 엔진</span>
+          </div>
+          <div class="feature-desc">
+            <p data-lang="en">
+              Built-in search acceleration for <code>find</code> and <code>grep</code> through a native FFF engine. Adds <code>multi_grep</code>, frecency-aware ranking, git-aware indexing, and optional replacement of <code>@</code> file autocomplete.
+            </p>
+            <p data-lang="ko">
+              네이티브 FFF 엔진을 통한 <code>find</code> / <code>grep</code> 내장 검색 가속. <code>multi_grep</code>, frecency 기반 랭킹, git 인식 인덱싱, 선택적 <code>@</code> 파일 자동완성을 추가합니다.
+            </p>
+          </div>
+        </div>
+
       </div>
     </section>
 
@@ -448,6 +464,21 @@
             </p>
             <p data-lang="ko">
               슬롭 클리너는 <code>worker</code> 또는 <code>plan-worker</code> 실행 성공 후 자동으로 실행됩니다. 원래 동작을 유지하면서 LLM 특정 코드 패턴(불필요한 주석, 과도한 로깅, 중복 타입 단언 등)을 감지하고 제거합니다.
+            </p>
+          </div>
+        </details>
+
+        <details>
+          <summary>
+            <span data-lang="en">How does the FFF search engine change my workflow?</span>
+            <span data-lang="ko">FFF 검색 엔진은 워크플로를 어떻게 바꾸나요?</span>
+          </summary>
+          <div class="faq-body">
+            <p data-lang="en">
+              It overrides the built-in <code>find</code> and <code>grep</code> tools with a native FFF-backed implementation and adds <code>multi_grep</code>. In <code>both</code> mode it also replaces <code>@</code> file autocomplete suggestions. Use <code>/fff-health</code> to inspect engine status and <code>/fff-mode tools-only</code> if you only want the tool overrides.
+            </p>
+            <p data-lang="ko">
+              기본 <code>find</code> / <code>grep</code> 도구를 네이티브 FFF 기반 구현으로 교체하고 <code>multi_grep</code>를 추가합니다. <code>both</code> 모드에서는 <code>@</code> 파일 자동완성도 대체합니다. 엔진 상태는 <code>/fff-health</code>로 확인하고, 도구 override만 원하면 <code>/fff-mode tools-only</code>를 사용하세요.
             </p>
           </div>
         </details>
