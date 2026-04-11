@@ -5,9 +5,11 @@
  * @-mention autocomplete suggestions in the interactive editor.
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import {
 	CustomEditor,
+	createFindToolDefinition,
+	createGrepToolDefinition,
 	getAgentDir,
 	truncateHead,
 	DEFAULT_MAX_BYTES,
@@ -194,6 +196,7 @@ export default function fffExtension(pi: ExtensionAPI) {
 	let finderCwd: string | null = null;
 	let activeCwd = process.cwd();
 	const cursorStore = new CursorStore();
+	const nativeFffAvailable = FileFinder.isAvailable();
 
 	try {
 		mkdirSync(FFF_DB_DIR, { recursive: true });
@@ -232,6 +235,48 @@ export default function fffExtension(pi: ExtensionAPI) {
 			return normalizeMode(process.env.PI_FFF_MODE);
 		}
 		return readConfigMode();
+	}
+
+	function resolveRuntimeCwd(ctx?: ExtensionContext): string {
+		if (ctx?.cwd && ctx.cwd.length > 0) {
+			activeCwd = ctx.cwd;
+		}
+		return activeCwd;
+	}
+
+	async function getFinderOrNull(cwd: string): Promise<FileFinder | null> {
+		if (!nativeFffAvailable) return null;
+		try {
+			return await ensureFinder(cwd);
+		} catch {
+			return null;
+		}
+	}
+
+	async function executeFallbackFind(toolCallId: string, params: { pattern: string; path?: string; limit?: number }, signal: AbortSignal | undefined, ctx: ExtensionContext) {
+		const fallback = createFindToolDefinition(resolveRuntimeCwd(ctx));
+		return fallback.execute(toolCallId, {
+			pattern: params.pattern,
+			path: params.path,
+			limit: params.limit,
+		}, signal, undefined, ctx);
+	}
+
+	async function executeFallbackGrep(
+		toolCallId: string,
+		params: { pattern: string; path?: string; ignoreCase?: boolean; literal?: boolean; context?: number; limit?: number },
+		signal: AbortSignal | undefined,
+		ctx: ExtensionContext,
+	) {
+		const fallback = createGrepToolDefinition(resolveRuntimeCwd(ctx));
+		return fallback.execute(toolCallId, {
+			pattern: params.pattern,
+			path: params.path,
+			ignoreCase: params.ignoreCase,
+			literal: params.literal,
+			context: params.context,
+			limit: params.limit,
+		}, signal, undefined, ctx);
 	}
 
 	async function ensureFinder(cwd: string): Promise<FileFinder> {
@@ -273,8 +318,8 @@ export default function fffExtension(pi: ExtensionAPI) {
 
 	async function getMentionItems(query: string, quotedPrefix: boolean, signal: AbortSignal): Promise<AutocompleteItem[]> {
 		if (signal.aborted) return [];
-		const f = await ensureFinder(activeCwd);
-		if (signal.aborted) return [];
+		const f = await getFinderOrNull(activeCwd);
+		if (!f || signal.aborted) return [];
 
 		const searchResult = f.fileSearch(query, { pageSize: MENTION_MAX_RESULTS });
 		if (!searchResult.ok) return [];
@@ -308,14 +353,24 @@ export default function fffExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
+		activeCwd = ctx.cwd;
+		if (!nativeFffAvailable) {
+			ctx.ui.setEditorComponent(undefined);
+			ctx.ui.notify("FFF native engine unavailable; using built-in find/grep tools as fallback where possible.", "warning");
+			return;
+		}
 		try {
-			activeCwd = ctx.cwd;
 			await ensureFinder(activeCwd);
 			applyEditorMode(ctx);
 		} catch (e: unknown) {
 			const msg = e instanceof Error ? e.message : String(e);
-			ctx.ui.notify(`FFF init failed: ${msg}`, "error");
+			ctx.ui.setEditorComponent(undefined);
+			ctx.ui.notify(`FFF init failed: ${msg}. Built-in search fallback remains available for find/grep.`, "warning");
 		}
+	});
+
+	pi.on("context", async (_event, ctx) => {
+		activeCwd = ctx.cwd;
 	});
 
 	pi.on("session_shutdown", async (_event, ctx) => {
@@ -361,10 +416,14 @@ export default function fffExtension(pi: ExtensionAPI) {
 		],
 		parameters: grepSchema,
 
-		async execute(_toolCallId, params, signal) {
+		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			if (signal?.aborted) throw new Error("Operation aborted");
 
-			const f = await ensureFinder(activeCwd);
+			const cwd = resolveRuntimeCwd(ctx);
+			const f = await getFinderOrNull(cwd);
+			if (!f) {
+				return executeFallbackGrep(_toolCallId, params, signal, ctx);
+			}
 			const effectiveLimit = Math.max(1, params.limit ?? DEFAULT_GREP_LIMIT);
 
 			let query = params.pattern;
@@ -497,10 +556,14 @@ export default function fffExtension(pi: ExtensionAPI) {
 		],
 		parameters: findSchema,
 
-		async execute(_toolCallId, params, signal) {
+		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			if (signal?.aborted) throw new Error("Operation aborted");
 
-			const f = await ensureFinder(activeCwd);
+			const cwd = resolveRuntimeCwd(ctx);
+			const f = await getFinderOrNull(cwd);
+			if (!f) {
+				return executeFallbackFind(_toolCallId, params, signal, ctx);
+			}
 			const effectiveLimit = Math.max(1, params.limit ?? DEFAULT_FIND_LIMIT);
 
 			let query = params.pattern;
@@ -627,13 +690,25 @@ export default function fffExtension(pi: ExtensionAPI) {
 		],
 		parameters: multiGrepSchema,
 
-		async execute(_toolCallId, params, signal) {
+		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			if (signal?.aborted) throw new Error("Operation aborted");
 			if (!params.patterns || params.patterns.length === 0) {
 				throw new Error("patterns array must have at least 1 element");
 			}
 
-			const f = await ensureFinder(activeCwd);
+			const cwd = resolveRuntimeCwd(ctx);
+			const f = await getFinderOrNull(cwd);
+			if (!f) {
+				return {
+					content: [{ type: "text", text: "FFF multi_grep requires the native FFF engine to be available for the current workspace." }],
+					details: {
+						totalMatched: 0,
+						totalFiles: 0,
+						truncated: false,
+						patterns: params.patterns,
+					},
+				};
+			}
 			const effectiveLimit = Math.max(1, params.limit ?? DEFAULT_GREP_LIMIT);
 			const prevCursor = params.cursor ? cursorStore.get(params.cursor) : undefined;
 
@@ -741,6 +816,10 @@ export default function fffExtension(pi: ExtensionAPI) {
 	pi.registerCommand("fff-health", {
 		description: "Show FFF file finder health and status",
 		handler: async (_args, ctx) => {
+			if (!nativeFffAvailable) {
+				ctx.ui.notify("FFF native engine unavailable. Built-in find/grep fallback is active.", "warning");
+				return;
+			}
 			if (!finder || finder.isDestroyed) {
 				ctx.ui.notify("FFF not initialized", "warning");
 				return;
@@ -774,6 +853,10 @@ export default function fffExtension(pi: ExtensionAPI) {
 	pi.registerCommand("fff-rescan", {
 		description: "Trigger FFF to rescan files",
 		handler: async (_args, ctx) => {
+			if (!nativeFffAvailable) {
+				ctx.ui.notify("FFF native engine unavailable. There is no native index to rescan.", "warning");
+				return;
+			}
 			if (!finder || finder.isDestroyed) {
 				ctx.ui.notify("FFF not initialized", "warning");
 				return;

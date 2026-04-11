@@ -65,6 +65,7 @@ What it changes:
 - adds `multi_grep` for multi-pattern OR search
 - stores frecency and query history under `~/.pi/agent/fff/`
 - initializes a native `FileFinder` instance at session start for the current working directory
+- falls back to built-in `find` / `grep` behavior if the native FFF layer is unavailable or fails to initialize for the current workspace
 
 Operational modes:
 - **`both`** — override tools and replace `@` file autocomplete suggestions

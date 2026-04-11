@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import extension from '../index.js';
 import { FileFinder } from '@ff-labs/fff-node';
+import { createFindToolDefinition, createGrepToolDefinition } from '@mariozechner/pi-coding-agent';
+
+const createTextResult = (text: string) => ({ content: [{ type: 'text', text }] });
 
 vi.mock('@ff-labs/fff-node', () => ({
   FileFinder: {
     create: vi.fn(),
+    isAvailable: vi.fn(() => true),
   },
 }));
 
@@ -13,6 +17,12 @@ vi.mock('@mariozechner/pi-coding-agent', () => ({
   truncateHead: (content: string) => ({ content, truncated: false }),
   DEFAULT_MAX_BYTES: 1024 * 1024,
   formatSize: (bytes: number) => `${bytes}B`,
+  createFindToolDefinition: vi.fn((cwd: string) => ({
+    execute: vi.fn(async () => createTextResult(`fallback-find:${cwd}`)),
+  })),
+  createGrepToolDefinition: vi.fn((cwd: string) => ({
+    execute: vi.fn(async () => createTextResult(`fallback-grep:${cwd}`)),
+  })),
   CustomEditor: class {
     setAutocompleteProvider() {}
   },
@@ -80,6 +90,7 @@ describe('fff-search extension', () => {
   beforeEach(() => {
     finder = createMockFinder();
     vi.clearAllMocks();
+    vi.mocked(FileFinder.isAvailable).mockReturnValue(true);
     vi.mocked(FileFinder.create).mockReturnValue({ ok: true, value: finder } as any);
   });
 
@@ -173,10 +184,35 @@ describe('fff-search extension', () => {
     const { mockPi, tools } = createMockPi();
     extension(mockPi);
 
-    const result = await tools.get('find').execute('tool-1', { pattern: 'index.ts' });
+    const result = await tools.get('find').execute('tool-1', { pattern: 'index.ts' }, undefined, undefined, { cwd: '/repo-a' });
 
     expect(finder.fileSearch).toHaveBeenCalledWith('index.ts', { pageSize: 200 });
     expect(result.content[0].text).toContain('src/index.ts');
+  });
+
+  it('falls back to the built-in find tool when the FFF native layer is unavailable', async () => {
+    vi.mocked(FileFinder.isAvailable).mockReturnValue(false);
+
+    const { mockPi, tools } = createMockPi();
+    extension(mockPi);
+
+    const result = await tools.get('find').execute('tool-1', { pattern: 'src index.ts' }, undefined, undefined, { cwd: '/fallback-repo' });
+
+    expect(createFindToolDefinition).toHaveBeenCalledWith('/fallback-repo');
+    expect(result.content[0].text).toContain('fallback-find:/fallback-repo');
+    expect(FileFinder.create).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the built-in grep tool when FFF initialization fails', async () => {
+    vi.mocked(FileFinder.create).mockReturnValue({ ok: false, error: 'native missing' } as any);
+
+    const { mockPi, tools } = createMockPi();
+    extension(mockPi);
+
+    const result = await tools.get('grep').execute('tool-1', { pattern: 'needle' }, undefined, undefined, { cwd: '/fallback-repo' });
+
+    expect(createGrepToolDefinition).toHaveBeenCalledWith('/fallback-repo');
+    expect(result.content[0].text).toContain('fallback-grep:/fallback-repo');
   });
 
   it('grep uses plain mode by default and prepends path constraints to the query', async () => {
@@ -193,13 +229,50 @@ describe('fff-search extension', () => {
     const { mockPi, tools } = createMockPi();
     extension(mockPi);
 
-    const result = await tools.get('grep').execute('tool-1', { pattern: 'foo', path: 'src/' });
+    const result = await tools.get('grep').execute('tool-1', { pattern: 'foo', path: 'src/' }, undefined, undefined, { cwd: '/repo-a' });
 
     expect(finder.grep).toHaveBeenCalledWith(
       'src/ foo',
       expect.objectContaining({ mode: 'plain', smartCase: true, beforeContext: 0, afterContext: 0 })
     );
     expect(result.content[0].text).toContain('src/a.ts:12: const foo = 1;');
+  });
+
+  it('reindexes per-call when the tool context cwd changes', async () => {
+    finder.grep.mockReturnValue({
+      ok: true,
+      value: {
+        items: [{ relativePath: 'src/a.ts', lineNumber: 1, lineContent: 'alpha' }],
+        totalMatched: 1,
+        totalFiles: 3,
+        nextCursor: null,
+      },
+    });
+
+    const secondFinder = createMockFinder();
+    secondFinder.grep.mockReturnValue({
+      ok: true,
+      value: {
+        items: [{ relativePath: 'src/b.ts', lineNumber: 2, lineContent: 'beta' }],
+        totalMatched: 1,
+        totalFiles: 4,
+        nextCursor: null,
+      },
+    });
+
+    vi.mocked(FileFinder.create)
+      .mockReturnValueOnce({ ok: true, value: finder } as any)
+      .mockReturnValueOnce({ ok: true, value: secondFinder } as any);
+
+    const { mockPi, tools } = createMockPi();
+    extension(mockPi);
+
+    await tools.get('grep').execute('tool-1', { pattern: 'alpha' }, undefined, undefined, { cwd: '/repo-a' });
+    await tools.get('grep').execute('tool-2', { pattern: 'beta' }, undefined, undefined, { cwd: '/repo-b' });
+
+    expect(FileFinder.create).toHaveBeenNthCalledWith(1, expect.objectContaining({ basePath: '/repo-a' }));
+    expect(FileFinder.create).toHaveBeenNthCalledWith(2, expect.objectContaining({ basePath: '/repo-b' }));
+    expect(finder.destroy).toHaveBeenCalledTimes(1);
   });
 
   it('grep switches to regex mode when literal is false', async () => {
