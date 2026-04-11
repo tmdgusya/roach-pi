@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.0](https://github.com/tmdgusya/roach-pi/compare/v1.6.2...v1.7.0) (2026-04-11)
+
+### Features
+
+* add FFF-powered search engine extension ([7c42996](https://github.com/tmdgusya/roach-pi/commit/7c4299655fc76f2c9e46cc051e3833278d415d1f))
+
+### Bug Fixes
+
+* add FFF fallback and cwd-aware search ([86f10d5](https://github.com/tmdgusya/roach-pi/commit/86f10d533b33107649283f62fa9baeae5a445486))
+
+### Documentation
+
+* document FFF engine usage ([b341e68](https://github.com/tmdgusya/roach-pi/commit/b341e689d530a0106eba839f3c3db51c3a6bfd58))
+
 ## [1.6.2](https://github.com/tmdgusya/roach-pi/compare/v1.6.1...v1.6.2) (2026-04-09)
 
 ### Bug Fixes
