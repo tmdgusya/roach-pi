@@ -41,6 +41,9 @@ pi install git:github.com/tmdgusya/pi-engineering-discipline-extension
 - **`/loop-stop [job-id]`**: Stop a specific loop job. Interactive selector if no ID given.
 - **`/loop-list`**: List all active loop jobs with run counts, error counts, and timing.
 - **`/loop-stop-all`**: Stop all active loop jobs (with confirmation).
+- **`/fff-mode both|tools-only`**: Switch FFF integration mode. `both` overrides search tools and `@` autocomplete. `tools-only` keeps only the tool overrides.
+- **`/fff-health`**: Show FFF engine status, indexed file count, git detection, and frecency/query tracker health.
+- **`/fff-rescan`**: Trigger an explicit FFF file rescan for the current working tree.
 
 ### Tools
 - **`ask_user_question`**: The agent calls this autonomously whenever it encounters ambiguity — generating questions and choices dynamically based on context.
@@ -48,6 +51,25 @@ pi install git:github.com/tmdgusya/pi-engineering-discipline-extension
   - **Single**: One-off investigation or exploration tasks
   - **Parallel**: Dispatch multiple independent agents concurrently (max 8 tasks, 4 concurrent)
   - **Chain**: Sequential pipeline where each step uses `{previous}` to reference prior output
+- **FFF-backed search overrides**:
+  - **`find`** → FFF fuzzy file search with ranking and git-aware indexing
+  - **`grep`** → FFF content search with pagination and smart-case behavior
+  - **`multi_grep`** → multi-pattern OR search through the FFF engine
+
+### FFF Search Engine
+
+ROACH PI now includes an embedded FFF-powered search extension under `extensions/fff-search`.
+
+What it changes:
+- replaces the built-in `find` and `grep` tools with FFF-backed implementations
+- adds `multi_grep` for multi-pattern OR search
+- stores frecency and query history under `~/.pi/agent/fff/`
+- initializes a native `FileFinder` instance at session start for the current working directory
+- falls back to built-in `find` / `grep` behavior if the native FFF layer is unavailable or fails to initialize for the current workspace
+
+Operational modes:
+- **`both`** — override tools and replace `@` file autocomplete suggestions
+- **`tools-only`** — override tools only, keep pi's default autocomplete
 
 ### Session Loop
 

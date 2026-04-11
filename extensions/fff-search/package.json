@@ -1,0 +1,24 @@
+{
+  "name": "pi-fff-search",
+  "version": "0.0.1",
+  "description": "FFF-powered search engine integration for ROACH PI",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ff-labs/fff-node": "^0.5.2",
+    "@mariozechner/pi-coding-agent": "latest",
+    "@mariozechner/pi-tui": "latest",
+    "@sinclair/typebox": "^0.34.49"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^1.0.0"
+  },
+  "pi": {
+    "extensions": ["./index.ts"]
+  }
+}
