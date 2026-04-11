@@ -129,8 +129,8 @@ describe("getPiInvocation", () => {
 
 describe("Constants", () => {
   it("should have correct limits", () => {
-    expect(MAX_PARALLEL_TASKS).toBe(8);
-    expect(MAX_CONCURRENCY).toBe(4);
+    expect(MAX_PARALLEL_TASKS).toBe(12);
+    expect(MAX_CONCURRENCY).toBe(10);
   });
 });
 
