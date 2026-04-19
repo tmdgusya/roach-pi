@@ -306,6 +306,49 @@ describe("before_agent_start Event", () => {
       else process.env.PI_SUBAGENT_DEPTH = prevDepth;
     }
   });
+
+  it("should suppress phase guidance when user prompt is a skill/command invocation", async () => {
+    const { mockPi, events, commands } = createMockPi();
+    extension(mockPi);
+
+    // Put the root session in ultraplanning phase via the /ultraplan command.
+    const ultraplan = commands.get("ultraplan");
+    await ultraplan.handler("test topic", {
+      ui: {
+        confirm: vi.fn().mockResolvedValue(true),
+        setStatus: vi.fn(),
+      },
+    } as any);
+
+    const handlers = events.get("before_agent_start")!;
+
+    // Case A: a normal user turn — phase guidance is injected as before.
+    const normal = await handlers[0](
+      { type: "before_agent_start", prompt: "keep working on the milestones", systemPrompt: "base" },
+      { cwd: "." } as any
+    );
+    expect(normal?.systemPrompt).toContain("Active Workflow: Milestone Planning (Ultraplan)");
+
+    // Case B: the user invokes a skill via the claude-code-style <command-name> tag.
+    // Phase guidance must NOT be injected for this turn.
+    const skillPrompt = [
+      "<command-message>systematic-debugging</command-message>",
+      "<command-name>/systematic-debugging</command-name>",
+      "<command-args>fix this bug</command-args>",
+    ].join("\n");
+    const skillTurn = await handlers[0](
+      { type: "before_agent_start", prompt: skillPrompt, systemPrompt: "base" },
+      { cwd: "." } as any
+    );
+    expect(skillTurn?.systemPrompt).not.toContain("Active Workflow: Milestone Planning (Ultraplan)");
+
+    // Case C: a raw "[skill] foo" marker also suppresses guidance.
+    const bracketTurn = await handlers[0](
+      { type: "before_agent_start", prompt: "[skill] some-skill\n\nfix this", systemPrompt: "base" },
+      { cwd: "." } as any
+    );
+    expect(bracketTurn?.systemPrompt).not.toContain("Active Workflow: Milestone Planning (Ultraplan)");
+  });
 });
 
 describe("/clarify Command", () => {

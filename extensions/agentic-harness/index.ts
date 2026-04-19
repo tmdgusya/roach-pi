@@ -529,8 +529,15 @@ export default function (pi: ExtensionAPI) {
     ].join("\n"),
   };
 
+  // Matches user turns that are claude-code skill/command invocations. We suppress
+  // phase guidance for these turns so the invoked skill's own instructions are not
+  // overridden by a stale workflow phase (e.g. user ran /ultraplan last week,
+  // never reset-phase, and today invokes /systematic-debugging).
+  const SKILL_INVOCATION_RE = /<command-name>|<command-message>|\[skill\]/;
+
   pi.on("before_agent_start", async (event, _ctx) => {
-    const guidance = isRootSession ? PHASE_GUIDANCE[currentPhase] : "";
+    const isSkillInvocation = SKILL_INVOCATION_RE.test(event.prompt ?? "");
+    const guidance = (isRootSession && !isSkillInvocation) ? PHASE_GUIDANCE[currentPhase] : "";
 
     let delegationInfo = "";
     if (depthConfig.canDelegate) {
