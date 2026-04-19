@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.2](https://github.com/tmdgusya/roach-pi/compare/v1.8.1...v1.8.2) (2026-04-19)
+
+### Bug Fixes
+
+* **harness:** clear activeGoalDocument on phase auto-reset ([88dbba1](https://github.com/tmdgusya/roach-pi/commit/88dbba18efcd4427ed203227140e15853f640559))
+* **harness:** guard session_compact phase restore with isRootSession ([f527d20](https://github.com/tmdgusya/roach-pi/commit/f527d204099a369a91b45acfb8312011a746e967))
+
+### Documentation
+
+* **plan:** phase state multi-session isolation plan ([273cca7](https://github.com/tmdgusya/roach-pi/commit/273cca756323d4765776b13c2b0f8096e1c85d99))
+
 ## [1.8.1](https://github.com/tmdgusya/roach-pi/compare/v1.8.0...v1.8.1) (2026-04-19)
 
 ### Bug Fixes
