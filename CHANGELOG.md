@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.1](https://github.com/tmdgusya/roach-pi/compare/v1.8.0...v1.8.1) (2026-04-19)
+
+### Bug Fixes
+
+* **harness:** auto-reset phase on terminal-artifact write ([c14351d](https://github.com/tmdgusya/roach-pi/commit/c14351def31867319588f1b5473d4f233b2c8354))
+* **harness:** never inject phase guidance in subagent context ([8af3455](https://github.com/tmdgusya/roach-pi/commit/8af34556c22e96c12bf222001904a44f387f2d16))
+* **harness:** suppress phase guidance on skill/command invocations ([e7c0266](https://github.com/tmdgusya/roach-pi/commit/e7c02669f3737b2ef751e2845af55dac97f9eb52))
+
+### Refactor
+
+* **harness:** drop global state file; phase is per-process in-memory only ([9bb134b](https://github.com/tmdgusya/roach-pi/commit/9bb134bb4ec0a19085a68241282f4d062a32291b))
+
 ## [1.8.0](https://github.com/tmdgusya/roach-pi/compare/v1.7.2...v1.8.0) (2026-04-11)
 
 ### Features
