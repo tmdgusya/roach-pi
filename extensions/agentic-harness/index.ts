@@ -39,10 +39,18 @@ const cacheStats: CacheStats = { totalInput: 0, totalCacheRead: 0 };
 
 const activeTools: ActiveTools = { running: new Map() };
 
+export function resolvePiAgentDir(envDir = process.env.PI_CODING_AGENT_DIR, homeDir = homedir()): string {
+  if (!envDir) return join(homeDir, ".pi", "agent");
+  if (envDir === "~") return homeDir;
+  if (envDir.startsWith("~/")) return join(homeDir, envDir.slice(2));
+  return envDir;
+}
+
 export default function (pi: ExtensionAPI) {
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const BUNDLED_AGENTS_DIR = join(__dirname, "agents");
   const BUNDLED_SKILLS_DIR = join(__dirname, "skills");
+  const agentDir = resolvePiAgentDir();
 
   const DIRECT_INPUT_OPTION = "직접 입력하기";
 
@@ -54,21 +62,42 @@ export default function (pi: ExtensionAPI) {
   const approvalStore = getDefaultApprovalStore();
 
   if (isRootSession) {
-    const rootSandbox = {
+    const createRootApprovalResolver = (ctx?: { hasUI?: boolean; ui?: { select?: (message: string, choices: string[]) => Promise<string | undefined> } }) => {
+      const hasUI = ctx?.hasUI !== false && !!ctx?.ui?.select;
+      return async (request: { reason: string; command: string; args: string[] }) => {
+        if (parsedApprovalMode.mode === "always") return { approved: true, scope: "session" as const };
+        if (parsedApprovalMode.mode === "deny") return { approved: false };
+        if (!hasUI) return { approved: false };
+        const message = [
+          "Sandbox escalation required to run unsandboxed.",
+          `Reason: ${request.reason}`,
+          `Command: ${request.command} ${request.args.join(" ")}`.trim(),
+        ].join("\n");
+        const choice = await ctx.ui!.select!(message, ["Deny", "Allow once", "Allow for session", "Always allow"]);
+        if (choice === "Allow once") return { approved: true, scope: "once" as const };
+        if (choice === "Allow for session") return { approved: true, scope: "session" as const };
+        if (choice === "Always allow") return { approved: true, scope: "always" as const };
+        return { approved: false };
+      };
+    };
+
+    const createRootSandbox = (ctx?: { hasUI?: boolean; ui?: { select?: (message: string, choices: string[]) => Promise<string | undefined> } }) => ({
       enabled: true,
       workspaceRoot: process.cwd(),
-      networkMode: "off" as const,
+      networkMode: "on" as const,
+      additionalWritableRoots: [agentDir],
       approvalMode: parsedApprovalMode.mode,
-      approvalResolver: async () => ({ approved: false }),
-    };
-    const sandboxedBashOperations = createSandboxedBashOperations(rootSandbox);
+      approvalResolver: createRootApprovalResolver(ctx),
+    });
+
+    const sandboxedBashOperations = createSandboxedBashOperations(createRootSandbox());
     const localBash = createBashTool(process.cwd(), { operations: sandboxedBashOperations });
     pi.registerTool({
       ...localBash,
       label: "bash (sandboxed)",
     });
-    pi.on("user_bash", () => ({
-      operations: sandboxedBashOperations,
+    pi.on("user_bash", (_event, ctx) => ({
+      operations: createSandboxedBashOperations(createRootSandbox(ctx as any)),
     }));
   }
 
@@ -247,9 +276,9 @@ export default function (pi: ExtensionAPI) {
           enabled: true,
           workspaceRoot: defaultCwd,
           // Subagents must reach model/provider endpoints and update local
-          // session lock/state files under ~/.pi/agent.
+          // session lock/state files under PI_CODING_AGENT_DIR (default: ~/.pi/agent).
           networkMode: "on" as const,
-          additionalWritableRoots: [join(homedir(), ".pi", "agent")],
+          additionalWritableRoots: [agentDir],
           approvalMode: parsedApprovalMode.mode,
           approvalResolver,
           approvalStore,
