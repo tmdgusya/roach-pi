@@ -136,6 +136,29 @@ describe('fff-search extension', () => {
     expect(finder.waitForScan).toHaveBeenCalledWith(15000);
   });
 
+  it("skips FFF initialization at filesystem root and keeps fallback active", async () => {
+    const { mockPi, events } = createMockPi();
+    extension(mockPi);
+
+    const ctx: any = {
+      cwd: '/',
+      ui: {
+        setEditorComponent: vi.fn(),
+        notify: vi.fn(),
+      },
+    };
+
+    const handler = events.get('session_start')?.[0];
+    await handler?.({ type: 'session_start' }, ctx);
+
+    expect(FileFinder.create).not.toHaveBeenCalled();
+    expect(ctx.ui.setEditorComponent).toHaveBeenCalledWith(undefined);
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      "FFF is disabled at '/'; built-in find/grep fallback is active.",
+      'info',
+    );
+  });
+
   it('installs the FFF editor wrapper by default on session start', async () => {
     const { mockPi, events } = createMockPi();
     extension(mockPi);

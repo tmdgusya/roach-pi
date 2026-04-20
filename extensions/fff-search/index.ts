@@ -20,7 +20,7 @@ import { Type } from "@sinclair/typebox";
 import { FileFinder } from "@ff-labs/fff-node";
 import type { GrepCursor, GrepMode, GrepResult, SearchResult } from "@ff-labs/fff-node";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { join } from "path";
+import { join, resolve } from "path";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -279,7 +279,15 @@ export default function fffExtension(pi: ExtensionAPI) {
 		}, signal, undefined, ctx);
 	}
 
+	function isFilesystemRoot(cwd: string): boolean {
+		const resolved = resolve(cwd);
+		return resolved === "/";
+	}
+
 	async function ensureFinder(cwd: string): Promise<FileFinder> {
+		if (isFilesystemRoot(cwd)) {
+			throw new Error("FFF disabled at filesystem root '/'; using built-in search fallback");
+		}
 		if (finder && !finder.isDestroyed && finderCwd === cwd) return finder;
 		if (finder && !finder.isDestroyed && finderCwd !== cwd) {
 			finder.destroy();
@@ -357,6 +365,11 @@ export default function fffExtension(pi: ExtensionAPI) {
 		if (!nativeFffAvailable) {
 			ctx.ui.setEditorComponent(undefined);
 			ctx.ui.notify("FFF native engine unavailable; using built-in find/grep tools as fallback where possible.", "warning");
+			return;
+		}
+		if (isFilesystemRoot(activeCwd)) {
+			ctx.ui.setEditorComponent(undefined);
+			ctx.ui.notify("FFF is disabled at '/'; built-in find/grep fallback is active.", "info");
 			return;
 		}
 		try {
