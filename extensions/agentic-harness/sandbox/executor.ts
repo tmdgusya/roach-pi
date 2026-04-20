@@ -1,6 +1,6 @@
 import { buildLinuxSandboxLaunch, detectLinuxSandboxCapability } from "./adapters/linux.js";
 import { buildMacSandboxLaunch, detectMacSandboxCapability } from "./adapters/macos.js";
-import { decideSandboxPolicy } from "./policy-engine.js";
+import { decideSandboxPolicy, makePolicyFingerprint } from "./policy-engine.js";
 import type { ApprovalResult, SandboxRuntimeOptions } from "./types.js";
 
 export interface SandboxLaunchResult {
@@ -69,6 +69,28 @@ export async function resolveSandboxLaunch(opts: ResolveSandboxLaunchOptions): P
   const additionalWritableRoots = sandbox.additionalWritableRoots || [];
   const networkMode = sandbox.networkMode || "off";
   const fsMode = "workspace-write";
+
+  if (sandbox.requireApprovalForAllCommands) {
+    const policyFingerprint = makePolicyFingerprint({
+      platform,
+      cwd,
+      workspaceRoot,
+      fsMode,
+      networkMode,
+    });
+    const approved = await resolveUnsandboxedApproval(
+      policyFingerprint,
+      "Policy requires explicit approval before command execution.",
+      command,
+      args,
+      cwd,
+      sandbox,
+    );
+    if (!approved) {
+      throw new Error("Command denied: explicit approval required.");
+    }
+    return { command, args, env, applied: false };
+  }
 
   const capability =
     platform === "linux"

@@ -81,13 +81,17 @@ export default function (pi: ExtensionAPI) {
       };
     };
 
-    const createRootSandbox = (ctx?: { hasUI?: boolean; ui?: { select?: (message: string, choices: string[]) => Promise<string | undefined> } }) => ({
+    const createRootSandbox = (
+      ctx?: { hasUI?: boolean; ui?: { select?: (message: string, choices: string[]) => Promise<string | undefined> } },
+      requireApprovalForAllCommands = true,
+    ) => ({
       enabled: true,
       workspaceRoot: process.cwd(),
       networkMode: "on" as const,
       additionalWritableRoots: [agentDir],
       approvalMode: parsedApprovalMode.mode,
       approvalResolver: createRootApprovalResolver(ctx),
+      requireApprovalForAllCommands,
     });
 
     const sandboxedBashOperations = createSandboxedBashOperations(createRootSandbox());
@@ -97,7 +101,7 @@ export default function (pi: ExtensionAPI) {
       label: "bash (sandboxed)",
     });
     pi.on("user_bash", (_event, ctx) => ({
-      operations: createSandboxedBashOperations(createRootSandbox(ctx as any)),
+      operations: createSandboxedBashOperations(createRootSandbox(ctx as any, true)),
     }));
   }
 
@@ -282,6 +286,7 @@ export default function (pi: ExtensionAPI) {
           approvalMode: parsedApprovalMode.mode,
           approvalResolver,
           approvalStore,
+          requireApprovalForAllCommands: true,
         });
 
         // Safety: cycle detection

@@ -52,4 +52,10 @@ export interface SandboxRuntimeOptions {
   approvalMode?: SandboxApprovalMode;
   approvalResolver?: (request: ApprovalRequest) => Promise<ApprovalResult>;
   approvalStore?: ApprovalStore;
+  /**
+   * When true, require approval before every command and run approved commands
+   * unsandboxed. This prevents "silent sandbox-denied" failures for interactive
+   * user shell commands.
+   */
+  requireApprovalForAllCommands?: boolean;
 }
