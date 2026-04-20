@@ -1,6 +1,6 @@
 {
   "name": "pi-engineering-discipline-extension",
-  "version": "1.9.3",
+  "version": "1.9.4",
   "description": "Advanced extension suite for pi-coding-agent, providing agentic harness and HUD dashboard.",
   "keywords": [
     "pi-package"

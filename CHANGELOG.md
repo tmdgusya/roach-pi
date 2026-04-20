@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.4](https://github.com/tmdgusya/roach-pi/compare/v1.9.3...v1.9.4) (2026-04-20)
+
+### Bug Fixes
+
+* **fff:** skip root cwd init and document startup debug toggles ([5821631](https://github.com/tmdgusya/roach-pi/commit/5821631fdd96d6aa0548489c28ad84d8c10b4919))
+
+### Tests
+
+* **harness:** stabilize approval tests and isolate agent-dir utility ([47d6479](https://github.com/tmdgusya/roach-pi/commit/47d6479208436155e72f59afe0a43604343547ee))
+
 ## [1.9.3](https://github.com/tmdgusya/roach-pi/compare/v1.9.2...v1.9.3) (2026-04-20)
 
 ### Bug Fixes
