@@ -10,7 +10,6 @@
   "pi": {
     "extensions": [
       "extensions/agentic-harness/index.ts",
-      "extensions/hud-dashboard/src/index.ts",
       "extensions/session-loop/index.ts",
       "extensions/autonomous-dev/index.ts",
       "extensions/fff-search/index.ts"
