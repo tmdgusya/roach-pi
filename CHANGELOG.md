@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.3](https://github.com/tmdgusya/roach-pi/compare/v1.9.2...v1.9.3) (2026-04-20)
+
+### Bug Fixes
+
+* **sandbox:** persist approvals across processes and enforce bash approval guard ([7aec87d](https://github.com/tmdgusya/roach-pi/commit/7aec87d1f020c28cdf52b69a1935dce0e3e579f6))
+* **sandbox:** require explicit approval before all bash commands ([ae232af](https://github.com/tmdgusya/roach-pi/commit/ae232af8eea086a8e17de0413780badb9af48470))
+
 ## [1.9.2](https://github.com/tmdgusya/roach-pi/compare/v1.9.1...v1.9.2) (2026-04-20)
 
 ### Bug Fixes
