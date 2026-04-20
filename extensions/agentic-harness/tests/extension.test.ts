@@ -1,4 +1,28 @@
 import { describe, it, expect, vi } from "vitest";
+
+vi.mock("@mariozechner/pi-coding-agent", () => ({
+  createBashTool: vi.fn(() => ({
+    name: "bash",
+    label: "bash",
+    description: "mock bash",
+    parameters: {},
+    execute: vi.fn(),
+  })),
+  isToolCallEventType: (toolName: string, event: any) => event?.toolName === toolName,
+  keyHint: (k: string, d?: string) => `${k}${d ? ` ${d}` : ""}`,
+  keyText: (t: string) => t,
+  rawKeyHint: (k: string, d?: string) => `${k}${d ? ` ${d}` : ""}`,
+  convertToLlm: vi.fn((x: unknown) => x),
+}));
+
+vi.mock("@mariozechner/pi-tui", () => ({
+  Text: class MockText {},
+}));
+
+vi.mock("@mariozechner/pi-ai", () => ({
+  complete: vi.fn(),
+}));
+
 import extension from "../index.js";
 
 function createMockPi() {
@@ -110,42 +134,52 @@ describe("Extension Registration", () => {
 describe("bash approval guard", () => {
   it("asks approval for bash commands in ask mode", async () => {
     const prevMode = process.env.PI_SANDBOX_APPROVAL_MODE;
+    const prevAgentDir = process.env.PI_CODING_AGENT_DIR;
     delete process.env.PI_SANDBOX_APPROVAL_MODE;
+    process.env.PI_CODING_AGENT_DIR = `/tmp/pi-test-agent-dir-${Date.now()}-bash-ask`;
     try {
       const { mockPi, events } = createMockPi();
       extension(mockPi);
-      const handler = events.get("tool_call")?.[1];
+      const handler = events.get("tool_call")?.at(-1);
       expect(handler).toBeDefined();
       const select = vi.fn().mockResolvedValue("Allow once");
+      const uniqueCwd = `/repo-bash-ask-${Date.now()}`;
       const result = await handler(
         { type: "tool_call", toolName: "bash", input: { command: "git push" } },
-        { cwd: "/repo", hasUI: true, ui: { select } },
+        { cwd: uniqueCwd, hasUI: true, ui: { select } },
       );
       expect(select).toHaveBeenCalled();
       expect(result).toBeUndefined();
     } finally {
       if (prevMode === undefined) delete process.env.PI_SANDBOX_APPROVAL_MODE;
       else process.env.PI_SANDBOX_APPROVAL_MODE = prevMode;
+      if (prevAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+      else process.env.PI_CODING_AGENT_DIR = prevAgentDir;
     }
   });
 
   it("blocks bash commands in ask mode when UI is unavailable", async () => {
     const prevMode = process.env.PI_SANDBOX_APPROVAL_MODE;
+    const prevAgentDir = process.env.PI_CODING_AGENT_DIR;
     delete process.env.PI_SANDBOX_APPROVAL_MODE;
+    process.env.PI_CODING_AGENT_DIR = `/tmp/pi-test-agent-dir-${Date.now()}-bash-no-ui`;
     try {
       const { mockPi, events } = createMockPi();
       extension(mockPi);
-      const handler = events.get("tool_call")?.[1];
+      const handler = events.get("tool_call")?.at(-1);
       expect(handler).toBeDefined();
+      const uniqueCwd = `/repo-bash-no-ui-${Date.now()}`;
       const result = await handler(
         { type: "tool_call", toolName: "bash", input: { command: "git push" } },
-        { cwd: "/repo", hasUI: false, ui: {} },
+        { cwd: uniqueCwd, hasUI: false, ui: {} },
       );
       expect(result?.block).toBe(true);
       expect(result?.reason).toContain("interactive approval");
     } finally {
       if (prevMode === undefined) delete process.env.PI_SANDBOX_APPROVAL_MODE;
       else process.env.PI_SANDBOX_APPROVAL_MODE = prevMode;
+      if (prevAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+      else process.env.PI_CODING_AGENT_DIR = prevAgentDir;
     }
   });
 });
@@ -157,7 +191,7 @@ describe(".env read guard", () => {
     try {
       const { mockPi, events } = createMockPi();
       extension(mockPi);
-      const handler = events.get("tool_call")?.[1];
+      const handler = events.get("tool_call")?.at(-1);
       expect(handler).toBeDefined();
       const select = vi.fn().mockResolvedValue("Allow once");
       const result = await handler(
@@ -178,7 +212,7 @@ describe(".env read guard", () => {
     try {
       const { mockPi, events } = createMockPi();
       extension(mockPi);
-      const handler = events.get("tool_call")?.[1];
+      const handler = events.get("tool_call")?.at(-1);
       expect(handler).toBeDefined();
       const result = await handler(
         { type: "tool_call", toolName: "read", input: { path: ".env" } },
@@ -198,7 +232,7 @@ describe(".env read guard", () => {
     try {
       const { mockPi, events } = createMockPi();
       extension(mockPi);
-      const handler = events.get("tool_call")?.[1];
+      const handler = events.get("tool_call")?.at(-1);
       expect(handler).toBeDefined();
       const result = await handler(
         { type: "tool_call", toolName: "read", input: { path: ".env" } },
@@ -217,7 +251,7 @@ describe(".env read guard", () => {
     try {
       const { mockPi, events } = createMockPi();
       extension(mockPi);
-      const handler = events.get("tool_call")?.[1];
+      const handler = events.get("tool_call")?.at(-1);
       expect(handler).toBeDefined();
       const select = vi.fn();
       const result = await handler(

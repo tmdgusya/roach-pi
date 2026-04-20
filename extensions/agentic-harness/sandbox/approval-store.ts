@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from "fs";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import { dirname, join } from "path";
-import { homedir } from "os";
 import type { ApprovalScope, ApprovalStore } from "./types.js";
+import { resolvePiAgentDir } from "./agent-dir.js";
 
 interface ApprovalFileV1 {
   version: 1;
@@ -15,13 +15,6 @@ interface ApprovalFileV2 {
 }
 
 const DEFAULT_SESSION_TTL_MS = Number.parseInt(process.env.PI_SANDBOX_SESSION_APPROVAL_TTL_MS || "21600000", 10); // 6h
-
-function resolvePiAgentDir(envDir = process.env.PI_CODING_AGENT_DIR, homeDir = homedir()): string {
-  if (!envDir) return join(homeDir, ".pi", "agent");
-  if (envDir === "~") return homeDir;
-  if (envDir.startsWith("~/")) return join(homeDir, envDir.slice(2));
-  return envDir;
-}
 
 const DEFAULT_APPROVAL_FILE = join(resolvePiAgentDir(), "sandbox-approvals.json");
 
@@ -133,8 +126,13 @@ export class FileApprovalStore implements ApprovalStore {
 }
 
 let defaultStore: FileApprovalStore | undefined;
+let defaultStorePath: string | undefined;
 
 export function getDefaultApprovalStore(): FileApprovalStore {
-  if (!defaultStore) defaultStore = new FileApprovalStore();
+  const path = join(resolvePiAgentDir(), "sandbox-approvals.json");
+  if (!defaultStore || defaultStorePath !== path) {
+    defaultStore = new FileApprovalStore(path);
+    defaultStorePath = path;
+  }
   return defaultStore;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolvePiAgentDir } from "../index.js";
+import { resolvePiAgentDir } from "../sandbox/agent-dir.js";
 
 describe("resolvePiAgentDir", () => {
   it("uses ~/.pi/agent when env var is unset", () => {

@@ -3,7 +3,6 @@ import { createBashTool, isToolCallEventType, keyHint, keyText, rawKeyHint } fro
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { RoachFooter, type CacheStats, type ActiveTools } from "./footer.js";
-import { homedir } from "os";
 import { join, dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { discoverAgents } from "./agents.js";
@@ -22,6 +21,7 @@ import { renderWebfetchCall, renderWebfetchResult } from "./webfetch/render.js";
 import { getDefaultApprovalStore } from "./sandbox/approval-store.js";
 import { parseSandboxApprovalMode } from "./sandbox/approval-mode.js";
 import { createSandboxedBashOperations } from "./sandbox/bash-operations.js";
+import { resolvePiAgentDir } from "./sandbox/agent-dir.js";
 import { makePolicyFingerprint } from "./sandbox/policy-engine.js";
 import { isSensitiveEnvPath } from "./sandbox/sensitive-env.js";
 
@@ -39,13 +39,6 @@ let activeGoalDocument: string | null = null;
 const cacheStats: CacheStats = { totalInput: 0, totalCacheRead: 0 };
 
 const activeTools: ActiveTools = { running: new Map() };
-
-export function resolvePiAgentDir(envDir = process.env.PI_CODING_AGENT_DIR, homeDir = homedir()): string {
-  if (!envDir) return join(homeDir, ".pi", "agent");
-  if (envDir === "~") return homeDir;
-  if (envDir.startsWith("~/")) return join(homeDir, envDir.slice(2));
-  return envDir;
-}
 
 export default function (pi: ExtensionAPI) {
   const __dirname = dirname(fileURLToPath(import.meta.url));
