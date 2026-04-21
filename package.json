@@ -16,7 +16,7 @@
     ]
   },
   "dependencies": {
-    "@ff-labs/fff-node": "^0.5.2",
+    "@ff-labs/fff-node": "^0.6.0",
     "@sinclair/typebox": "^0.34.49"
   },
   "devDependencies": {
