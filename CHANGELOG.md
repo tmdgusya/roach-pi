@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.10.0](https://github.com/tmdgusya/roach-pi/compare/v1.9.6...v1.10.0) (2026-04-23)
+
+### Features
+
+* implement workspace-memory extension with auto-save, recall, and scoring ([64b3a02](https://github.com/tmdgusya/roach-pi/commit/64b3a027f59463831af15e0ba752950ed484fa23))
+
+### Bug Fixes
+
+* **workspace-memory:** align eviction types and add recall/e2e tests ([0758e24](https://github.com/tmdgusya/roach-pi/commit/0758e2457d942f899bca65644b1c8e91e4536376))
+* **workspace-memory:** ensure keyword-based template selection works when LLM omits template ([353f02e](https://github.com/tmdgusya/roach-pi/commit/353f02ef8b5ddabaf1ba8fa52340068f9c4c9657))
+
+### Documentation
+
+* add workspace-memory feature context brief and implementation plan ([a8b39dc](https://github.com/tmdgusya/roach-pi/commit/a8b39dce11ef3d59c0f4a7540dd9efdb1ee78396))
+
+### Refactor
+
+* **workspace-memory:** fix scoring/eviction bugs, extract modules, improve type safety ([c17090a](https://github.com/tmdgusya/roach-pi/commit/c17090a6b63262009dcc694d3459d96b91dad504))
+
 ## [1.9.6](https://github.com/tmdgusya/roach-pi/compare/v1.9.5...v1.9.6) (2026-04-22)
 
 ### Bug Fixes
