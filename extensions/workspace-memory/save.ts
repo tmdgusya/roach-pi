@@ -41,8 +41,9 @@ export function createAndSaveMemory(
 
 	const detectedKeywords = detectKeywords(input.content);
 	const template: MemoryTemplate =
-		normalizeTemplate(input.template) ||
-		selectTemplateFromKeywords(detectedKeywords);
+		input.template
+			? normalizeTemplate(input.template)
+			: selectTemplateFromKeywords(detectedKeywords);
 
 	const memoryId = generateMemoryId();
 	const now = new Date().toISOString();
