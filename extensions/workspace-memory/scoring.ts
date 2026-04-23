@@ -3,7 +3,7 @@
  */
 
 import type { MemoryIndex, MemoryIndexEntry } from "./types";
-import { saveIndex, deleteMemoryFile } from "./storage";
+import { saveIndex } from "./storage";
 
 const MAX_MEMORIES = 200;
 const RECENCY_HALFLIFE_DAYS = 30;
@@ -14,8 +14,9 @@ const RECENCY_HALFLIFE_DAYS = 30;
 export function daysSince(isoDate: string | null): number {
 	if (!isoDate) return Infinity;
 	const then = new Date(isoDate).getTime();
+	if (Number.isNaN(then)) return Infinity;
 	const now = Date.now();
-	const diffMs = now - then;
+	const diffMs = Math.max(0, now - then);
 	return diffMs / (1000 * 60 * 60 * 24);
 }
 
@@ -61,16 +62,14 @@ export function evictIfNeeded(index: MemoryIndex, cwd: string): number {
 	// Ensure all scores are up to date
 	recalculateAllScores(index);
 
-	// Sort by score ascending (lowest first)
-	index.memories.sort((a, b) => a.score - b.score);
+	// Sort by score ascending, tie-break by oldest first
+	index.memories.sort((a, b) => {
+		if (a.score !== b.score) return a.score - b.score;
+		return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+	});
 
 	const toRemove = index.memories.length - MAX_MEMORIES;
 	const evicted = index.memories.splice(0, toRemove);
-
-	// Delete files for evicted memories
-	for (const mem of evicted) {
-		deleteMemoryFile(mem.id, cwd);
-	}
 
 	// Re-sort by creation date for stable ordering
 	index.memories.sort(
@@ -78,7 +77,7 @@ export function evictIfNeeded(index: MemoryIndex, cwd: string): number {
 			new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
 	);
 
-	return evicted.length;
+	return evicted;
 }
 
 /**

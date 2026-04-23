@@ -147,6 +147,4 @@ export function getSavePrompt(template: MemoryTemplate): string {
 	return TEMPLATE_PROMPTS[template];
 }
 
-function escapeRegex(str: string): string {
-	return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+import { escapeRegex } from "./utils";

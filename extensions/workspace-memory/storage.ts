@@ -18,6 +18,36 @@ const DEFAULT_INDEX: MemoryIndex = {
 	memories: [],
 };
 
+const VALID_ID_REGEX = /^mem-\d+-[a-z0-9]+$/;
+
+// ---------------------------------------------------------------------------
+// Per-workspace index cache
+// ---------------------------------------------------------------------------
+
+const indexCache = new Map<string, MemoryIndex>();
+
+export function getCachedIndex(cwd: string): MemoryIndex {
+	if (!indexCache.has(cwd)) {
+		const index = loadIndex(cwd);
+		indexCache.set(cwd, index);
+	}
+	return indexCache.get(cwd)!;
+}
+
+export function setCachedIndex(cwd: string, index: MemoryIndex): void {
+	indexCache.set(cwd, index);
+}
+
+export function invalidateCache(cwd: string): void {
+	indexCache.delete(cwd);
+}
+
+export function validateMemoryId(id: string): void {
+	if (!VALID_ID_REGEX.test(id)) {
+		throw new Error(`Invalid memory ID: ${id}`);
+	}
+}
+
 /**
  * Encode cwd to safe filesystem path (same pattern as sessionManager)
  */
@@ -38,7 +68,7 @@ export function getMemoryDir(cwd: string): string {
 export function ensureMemoryDir(cwd: string): void {
 	const dir = getMemoryDir(cwd);
 	if (!existsSync(dir)) {
-		mkdirSync(dir, { recursive: true });
+		mkdirSync(dir, { recursive: true, mode: 0o700 });
 	}
 }
 
@@ -90,6 +120,7 @@ export function generateMemoryId(): string {
  * Load full memory content by ID
  */
 export function loadMemory(id: string, cwd: string): Memory | null {
+	validateMemoryId(id);
 	const dir = getMemoryDir(cwd);
 	const filePath = join(dir, `${id}.json`);
 
@@ -109,16 +140,18 @@ export function loadMemory(id: string, cwd: string): Memory | null {
  * Save full memory content
  */
 export function saveMemory(memory: Memory, cwd: string): void {
+	validateMemoryId(memory.id);
 	ensureMemoryDir(cwd);
 	const dir = getMemoryDir(cwd);
 	const filePath = join(dir, `${memory.id}.json`);
-	writeFileSync(filePath, JSON.stringify(memory, null, 2), "utf8");
+	writeFileSync(filePath, JSON.stringify(memory, null, 2), { encoding: "utf8", mode: 0o600 });
 }
 
 /**
  * Delete memory file by ID
  */
 export function deleteMemoryFile(id: string, cwd: string): void {
+	validateMemoryId(id);
 	const dir = getMemoryDir(cwd);
 	const filePath = join(dir, `${id}.json`);
 	if (existsSync(filePath)) {
