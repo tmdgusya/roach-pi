@@ -3,7 +3,6 @@
  */
 
 import type { MemoryIndex, MemoryIndexEntry } from "./types";
-import { saveIndex } from "./storage";
 
 const MAX_MEMORIES = 200;
 const RECENCY_HALFLIFE_DAYS = 30;
@@ -52,11 +51,11 @@ export function recordRecall(entry: MemoryIndexEntry): void {
 
 /**
  * Evict lowest-scoring memories if count exceeds MAX_MEMORIES
- * Returns number of evicted memories
+ * Returns evicted memory entries
  */
-export function evictIfNeeded(index: MemoryIndex, cwd: string): number {
+export function evictIfNeeded(index: MemoryIndex, cwd: string): MemoryIndexEntry[] {
 	if (index.memories.length <= MAX_MEMORIES) {
-		return 0;
+		return [];
 	}
 
 	// Ensure all scores are up to date

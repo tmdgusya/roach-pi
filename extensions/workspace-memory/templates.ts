@@ -2,7 +2,7 @@
  * Templates and keyword mapping for workspace-memory extension
  */
 
-import type { MemoryTemplate, KeywordTemplateMapping } from "./types";
+import type { MemoryTemplate } from "./types";
 
 // ---------------------------------------------------------------------------
 // Keyword → Template mapping
@@ -101,10 +101,25 @@ export function detectKeywords(text: string): string[] {
 				found.push(keyword);
 			}
 		} else {
-			// Single word: use word boundary regex
-			const regex = new RegExp(`\\b${escapeRegex(keyword)}\\b`, "i");
-			if (regex.test(lowerText)) {
-				found.push(keyword);
+			const lowerKeyword = keyword.toLowerCase();
+			const hasKorean = /[\uac00-\ud7af]/.test(lowerKeyword);
+
+			if (hasKorean) {
+				// JS \b does not work reliably for Korean token boundaries.
+				// Match only when surrounded by non-word-like chars.
+				const regex = new RegExp(
+					`(^|[^\\p{L}\\p{N}_-])${escapeRegex(lowerKeyword)}($|[^\\p{L}\\p{N}_-])`,
+					"iu"
+				);
+				if (regex.test(lowerText)) {
+					found.push(keyword);
+				}
+			} else {
+				// Keep English single-word matching strict to avoid partial matches.
+				const regex = new RegExp(`\\b${escapeRegex(lowerKeyword)}\\b`, "i");
+				if (regex.test(lowerText)) {
+					found.push(keyword);
+				}
 			}
 		}
 	}
