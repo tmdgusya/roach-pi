@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.11.0](https://github.com/tmdgusya/roach-pi/compare/v1.10.0...v1.11.0) (2026-04-24)
+
+### Features
+
+* adopt selected subagent orchestration features ([6846b06](https://github.com/tmdgusya/roach-pi/commit/6846b06d7f6a0704913d1a9d90740eaea424e5a5))
+
 ## [1.10.0](https://github.com/tmdgusya/roach-pi/compare/v1.9.6...v1.10.0) (2026-04-23)
 
 ### Features
