@@ -23,6 +23,7 @@ vi.mock("@mariozechner/pi-ai", () => ({
   complete: vi.fn(),
 }));
 
+import { createBashTool } from "@mariozechner/pi-coding-agent";
 import extension from "../index.js";
 
 function createMockPi() {
@@ -175,6 +176,48 @@ describe("bash approval guard", () => {
       );
       expect(result?.block).toBe(true);
       expect(result?.reason).toContain("interactive approval");
+    } finally {
+      if (prevMode === undefined) delete process.env.PI_SANDBOX_APPROVAL_MODE;
+      else process.env.PI_SANDBOX_APPROVAL_MODE = prevMode;
+      if (prevAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+      else process.env.PI_CODING_AGENT_DIR = prevAgentDir;
+    }
+  });
+
+  it("reuses an 'Allow once' approval across the execution-time sandbox gate", async () => {
+    const prevMode = process.env.PI_SANDBOX_APPROVAL_MODE;
+    const prevAgentDir = process.env.PI_CODING_AGENT_DIR;
+    delete process.env.PI_SANDBOX_APPROVAL_MODE;
+    process.env.PI_CODING_AGENT_DIR = `/tmp/pi-test-agent-dir-${Date.now()}-bash-once-bridge`;
+    try {
+      (createBashTool as unknown as { mockClear: () => void }).mockClear();
+
+      const { mockPi, events } = createMockPi();
+      extension(mockPi);
+
+      const handler = events.get("tool_call")?.at(-1);
+      expect(handler).toBeDefined();
+
+      const cwd = process.cwd();
+      const select = vi.fn().mockResolvedValue("Allow once");
+      const approval = await handler(
+        { type: "tool_call", toolName: "bash", input: { command: "true" } },
+        { cwd, hasUI: true, ui: { select } },
+      );
+      expect(approval).toBeUndefined();
+      expect(select).toHaveBeenCalled();
+
+      const calls = (createBashTool as unknown as { mock: { calls: Array<[string, { operations: { exec: Function } }]> } }).mock.calls;
+      expect(calls.length).toBeGreaterThan(0);
+      const operations = calls[0][1].operations;
+
+      const execResult = await operations.exec("true", cwd, {
+        env: process.env,
+        onData: () => undefined,
+        signal: new AbortController().signal,
+      });
+
+      expect(execResult.exitCode).toBe(0);
     } finally {
       if (prevMode === undefined) delete process.env.PI_SANDBOX_APPROVAL_MODE;
       else process.env.PI_SANDBOX_APPROVAL_MODE = prevMode;

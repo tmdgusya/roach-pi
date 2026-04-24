@@ -24,6 +24,7 @@ import { createSandboxedBashOperations } from "./sandbox/bash-operations.js";
 import { resolvePiAgentDir } from "./sandbox/agent-dir.js";
 import { makePolicyFingerprint } from "./sandbox/policy-engine.js";
 import { isSensitiveEnvPath } from "./sandbox/sensitive-env.js";
+import type { ApprovalRequest } from "./sandbox/types.js";
 
 type WorkflowPhase =
   | "idle"
@@ -54,11 +55,22 @@ export default function (pi: ExtensionAPI) {
   let warnedInvalidApprovalMode = false;
   let announcedAlwaysApprovalMode = false;
   const approvalStore = getDefaultApprovalStore();
+  const EXPLICIT_BASH_APPROVAL_REASON = "Policy requires explicit approval before command execution.";
+  const oneTimeBashApprovals = new Set<string>();
+  const makeOneTimeBashApprovalKey = (approvalKey: string, command: string, args: string[]) => {
+    const rendered = `${command} ${args.join(" ")}`.trim();
+    return `${approvalKey}:${rendered}`;
+  };
 
   if (isRootSession) {
     const createRootApprovalResolver = (ctx?: { hasUI?: boolean; ui?: { select?: (message: string, choices: string[]) => Promise<string | undefined> } }) => {
       const hasUI = ctx?.hasUI !== false && !!ctx?.ui?.select;
-      return async (request: { reason: string; command: string; args: string[] }) => {
+      return async (request: ApprovalRequest) => {
+        const approvalKey = `${request.policyFingerprint}:${request.reason}`;
+        const onceKey = makeOneTimeBashApprovalKey(approvalKey, request.command, request.args);
+        if (oneTimeBashApprovals.delete(onceKey)) {
+          return { approved: true, scope: "once" as const };
+        }
         if (parsedApprovalMode.mode === "always") return { approved: true, scope: "session" as const };
         if (parsedApprovalMode.mode === "deny") return { approved: false };
         if (!hasUI) return { approved: false };
@@ -834,7 +846,7 @@ export default function (pi: ExtensionAPI) {
         fsMode: "workspace-write",
         networkMode: "on",
       });
-      const fallbackReason = "Policy requires explicit approval before command execution.";
+      const fallbackReason = EXPLICIT_BASH_APPROVAL_REASON;
       const approvalKey = `${policyFingerprint}:${fallbackReason}`;
       const cached = approvalStore.getApprovedScope(approvalKey);
       if (cached === "session" || cached === "always") return;
@@ -855,7 +867,10 @@ export default function (pi: ExtensionAPI) {
         ["Deny", "Allow once", "Allow for session", "Always allow"],
       );
 
-      if (choice === "Allow once") return;
+      if (choice === "Allow once") {
+        oneTimeBashApprovals.add(makeOneTimeBashApprovalKey(approvalKey, "bash", ["-lc", command]));
+        return;
+      }
       if (choice === "Allow for session") {
         await approvalStore.setApprovedScope(approvalKey, "session");
         return;
