@@ -94,6 +94,11 @@ describe("runTeam", () => {
     expect(calls.map((call) => call.taskId)).toEqual(["task-1", "task-2"]);
     expect(calls.every((call) => call.extraEnv?.PI_TEAM_WORKER === "1")).toBe(true);
     expect(summary.ok).toBe(true);
+    expect(summary.backendRequested).toBe("auto");
+    expect(summary.backendUsed).toBe("native");
+    expect(summary.tasks[0].terminal).toMatchObject({
+      backend: "native",
+    });
     expect(summary.completedCount).toBe(2);
     expect(summary.failedCount).toBe(0);
     expect(summary.tasks.map((task) => task.status)).toEqual(["completed", "completed"]);

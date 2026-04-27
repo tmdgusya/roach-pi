@@ -15,6 +15,16 @@ import {
 export const PI_TEAM_WORKER_ENV = "PI_TEAM_WORKER";
 
 export type TeamTaskStatus = "pending" | "in_progress" | "completed" | "failed" | "blocked" | "interrupted";
+export type TeamBackend = "auto" | "native" | "tmux";
+export type ResolvedTeamBackend = "native" | "tmux";
+
+export interface TeamTerminalMetadata {
+  backend: ResolvedTeamBackend;
+  sessionName?: string;
+  windowName?: string;
+  paneId?: string;
+  attachCommand?: string;
+}
 
 export interface TeamTask {
   id: string;
@@ -32,6 +42,7 @@ export interface TeamTask {
   updatedAt?: string;
   completedAt?: string;
   heartbeatAt?: string;
+  terminal?: TeamTerminalMetadata;
 }
 
 export interface TeamRunOptions {
@@ -46,6 +57,7 @@ export interface TeamRunOptions {
   resumeMode?: StaleTaskResumeMode;
   staleTaskMs?: number;
   heartbeatMs?: number;
+  backend?: TeamBackend;
 }
 
 export interface TeamVerificationEvidence {
@@ -67,6 +79,8 @@ export interface TeamRunSummary {
   blockedCount: number;
   success: boolean;
   ok: boolean;
+  backendRequested: TeamBackend;
+  backendUsed: ResolvedTeamBackend;
   tasks: TeamTask[];
   finalSynthesis: string;
   verificationEvidence: TeamVerificationEvidence;
@@ -194,7 +208,14 @@ function createEvidence(tasks: TeamTask[], results: SingleResult[]): TeamVerific
   };
 }
 
-export function synthesizeTeamRun(goal: string, tasks: TeamTask[], results: SingleResult[], maxOutput?: number): TeamRunSummary {
+export function synthesizeTeamRun(
+  goal: string,
+  tasks: TeamTask[],
+  results: SingleResult[],
+  maxOutput?: number,
+  backendRequested: TeamBackend = "auto",
+  backendUsed: ResolvedTeamBackend = "native",
+): TeamRunSummary {
   const completedCount = tasks.filter((task) => task.status === "completed").length;
   const failedCount = tasks.filter((task) => task.status === "failed").length;
   const blockedCount = tasks.filter((task) => task.status === "blocked").length;
@@ -214,6 +235,8 @@ export function synthesizeTeamRun(goal: string, tasks: TeamTask[], results: Sing
     blockedCount,
     success,
     ok: success,
+    backendRequested,
+    backendUsed,
     tasks,
     finalSynthesis: [
       `Team ${success ? "completed" : "finished with failures"}: ${completedCount}/${tasks.length} completed for goal: ${goal}`,
@@ -261,6 +284,8 @@ export function resolveTeamWorktreePolicy(opts: Pick<TeamRunOptions, "worktree" 
 
 export async function runTeam(opts: TeamRunOptions, runtime: TeamRuntime): Promise<TeamRunSummary> {
   const agentName = opts.agent || "worker";
+  const backendRequested = opts.backend ?? "auto";
+  const backendUsed: ResolvedTeamBackend = "native";
   const now = runtime.now ?? (() => new Date().toISOString());
   const initialNow = now();
   const isResume = !!opts.resumeRunId;
@@ -280,6 +305,9 @@ export async function runTeam(opts: TeamRunOptions, runtime: TeamRuntime): Promi
   }
 
   const tasks = record.tasks;
+  for (const task of tasks) {
+    task.terminal = task.terminal ?? { backend: backendUsed };
+  }
   const existingResults: SingleResult[] = [];
   try {
     validateTeamTasks(tasks);
@@ -291,7 +319,7 @@ export async function runTeam(opts: TeamRunOptions, runtime: TeamRuntime): Promi
       invalidDependency.errorMessage = err instanceof Error ? err.message : "MVP team mode only supports dependency-free parallel batches.";
       record = recordTeamEvent(record, { type: "task_failed", taskId: invalidDependency.id, createdAt: invalidDependency.updatedAt, message: invalidDependency.errorMessage });
     }
-    const summary = synthesizeTeamRun(record.goal, tasks, [], opts.maxOutput);
+    const summary = synthesizeTeamRun(record.goal, tasks, [], opts.maxOutput, backendRequested, backendUsed);
     record = setTeamRunStatus(record, "failed", now(), summary);
     await persistIfEnabled(runtime, record);
     return summary;
@@ -319,7 +347,7 @@ export async function runTeam(opts: TeamRunOptions, runtime: TeamRuntime): Promi
       deliveredAt: startedAt,
     });
     await persistIfEnabled(runtime, record);
-    runtime.emitProgress?.(synthesizeTeamRun(record.goal, tasks, [], opts.maxOutput));
+    runtime.emitProgress?.(synthesizeTeamRun(record.goal, tasks, [], opts.maxOutput, backendRequested, backendUsed));
     let heartbeat: ReturnType<typeof setInterval> | undefined;
     const heartbeatMs = opts.heartbeatMs ?? 15_000;
     if (heartbeatMs > 0) {
@@ -375,11 +403,11 @@ export async function runTeam(opts: TeamRunOptions, runtime: TeamRuntime): Promi
       record = recordTeamEvent(record, { type: "task_failed", taskId: task.id, createdAt: completedAt, message: task.errorMessage });
     }
     await persistIfEnabled(runtime, record);
-    runtime.emitProgress?.(synthesizeTeamRun(record.goal, tasks, [result], opts.maxOutput));
+    runtime.emitProgress?.(synthesizeTeamRun(record.goal, tasks, [result], opts.maxOutput, backendRequested, backendUsed));
     return result;
   });
 
-  const summary = synthesizeTeamRun(record.goal, tasks, [...existingResults, ...results], opts.maxOutput);
+  const summary = synthesizeTeamRun(record.goal, tasks, [...existingResults, ...results], opts.maxOutput, backendRequested, backendUsed);
   const finalStatus = summary.success
     ? "completed"
     : tasks.some((task) => task.status === "interrupted" || task.status === "in_progress")

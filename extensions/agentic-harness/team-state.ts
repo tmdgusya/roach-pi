@@ -46,7 +46,7 @@ export interface TeamRunRecord {
 }
 
 export type TeamRunOptionsSnapshot = Pick<TeamRunOptions,
-  "goal" | "workerCount" | "agent" | "worktree" | "worktreePolicy" | "maxOutput" | "runId" | "resumeRunId" | "resumeMode" | "staleTaskMs"
+  "goal" | "workerCount" | "agent" | "worktree" | "worktreePolicy" | "backend" | "maxOutput" | "runId" | "resumeRunId" | "resumeMode" | "staleTaskMs"
 >;
 
 export type StaleTaskResumeMode = "mark-interrupted" | "retry-stale";
@@ -118,6 +118,7 @@ export function createTeamRunRecord(params: {
       agent: params.options?.agent,
       worktree: params.options?.worktree,
       worktreePolicy: params.options?.worktreePolicy,
+      backend: params.options?.backend,
       maxOutput: params.options?.maxOutput,
       runId: params.options?.runId,
       resumeRunId: params.options?.resumeRunId,

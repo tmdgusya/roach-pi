@@ -241,6 +241,11 @@ export default function (pi: ExtensionAPI) {
       enum: ["off", "on", "auto"],
       description: "Worktree isolation policy. Defaults to the legacy worktree boolean behavior.",
     })),
+    backend: Type.Optional(Type.Unsafe<"auto" | "native" | "tmux">({
+      type: "string",
+      enum: ["auto", "native", "tmux"],
+      description: "Execution backend selection for team workers. auto prefers tmux when available.",
+    })),
     maxOutput: Type.Optional(Type.Number({ description: "Maximum characters of model-facing worker output to retain" })),
     runId: Type.Optional(Type.String({ description: "Optional durable team run id for persisted state" })),
     resumeRunId: Type.Optional(Type.String({ description: "Resume a previously persisted team run id" })),
@@ -268,7 +273,7 @@ export default function (pi: ExtensionAPI) {
       renderCall: (args, theme) => renderCall(args, theme),
       renderResult: (result, { expanded }, theme) => renderResult(result, expanded, theme),
       execute: async (_toolCallId, params, signal, onUpdate, ctx) => {
-        const { goal, workerCount, agent, agentScope, worktree, worktreePolicy, maxOutput, runId, resumeRunId, resumeMode, staleTaskMs } = params;
+        const { goal, workerCount, agent, agentScope, worktree, worktreePolicy, backend, maxOutput, runId, resumeRunId, resumeMode, staleTaskMs } = params;
         const defaultCwd = ctx.cwd;
         const teamRunStateRoot = defaultTeamRunStateRoot(defaultCwd);
         const hasUI = (ctx as any).hasUI !== false && !!ctx?.ui?.select;
@@ -299,7 +304,7 @@ export default function (pi: ExtensionAPI) {
           approvalStore,
           requireApprovalForAllCommands: true,
         });
-        const summary = await runTeam({ goal, workerCount, agent, worktree, worktreePolicy, maxOutput, runId, resumeRunId, resumeMode, staleTaskMs }, {
+        const summary = await runTeam({ goal, workerCount, agent, worktree, worktreePolicy, backend, maxOutput, runId, resumeRunId, resumeMode, staleTaskMs }, {
           findAgent,
           summarizeResult: getResultSummaryText,
           persistRun: async (record) => {

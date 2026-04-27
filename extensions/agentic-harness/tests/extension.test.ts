@@ -150,6 +150,11 @@ describe("Extension Registration", () => {
     expect(schema.properties.agentScope).toBeDefined();
     expect(schema.properties.worktree).toBeDefined();
     expect(schema.properties.worktreePolicy).toBeDefined();
+    expect(schema.properties.backend).toMatchObject({
+      type: "string",
+      enum: ["auto", "native", "tmux"],
+      description: "Execution backend selection for team workers. auto prefers tmux when available.",
+    });
     expect(schema.properties.maxOutput).toBeDefined();
     expect(schema.properties.runId).toBeDefined();
     expect(schema.properties.resumeRunId).toBeDefined();
