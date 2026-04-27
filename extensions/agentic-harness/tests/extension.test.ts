@@ -137,6 +137,22 @@ describe("Extension Registration", () => {
     expect(tool.renderResult).toBeTypeOf("function");
   });
 
+  it("should expose the documented team tool parameter contract", () => {
+    const { mockPi, tools } = createMockPi();
+    extension(mockPi);
+
+    const tool = tools.get("team");
+    expect(tool).toBeDefined();
+    const schema = tool.parameters;
+    expect(schema.properties.goal).toBeDefined();
+    expect(schema.properties.workerCount).toBeDefined();
+    expect(schema.properties.agent).toBeDefined();
+    expect(schema.properties.agentScope).toBeDefined();
+    expect(schema.properties.worktree).toBeDefined();
+    expect(schema.properties.maxOutput).toBeDefined();
+    expect(schema.required).toContain("goal");
+  });
+
   it("should register team tool in root session", () => {
     const { mockPi, tools } = createMockPi();
     extension(mockPi);

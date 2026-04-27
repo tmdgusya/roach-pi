@@ -4,7 +4,9 @@ import { emptyUsage, type SingleResult } from "../types.js";
 import {
   buildTeamWorkerPrompt,
   createDefaultTeamTasks,
+  formatTeamRunSummary,
   runTeam,
+  synthesizeTeamRun,
   validateTeamTasks,
 } from "../team.js";
 
@@ -103,6 +105,57 @@ describe("runTeam", () => {
     expect(summary.verificationEvidence.worktreeRefs).toEqual(["/tmp/task-1", "/tmp/task-2"]);
   });
 
+  it("keeps the public run summary JSON-serializable with stable task and evidence fields", async () => {
+    const summary = await runTeam(
+      { goal: "Document the team mode contract", workerCount: 1, agent: "worker" },
+      {
+        runTask: async ({ task, prompt }) => fakeResult(task.agent, prompt, "contract locked", {
+          artifacts: {
+            artifactDir: ".pi/team/run-1",
+            outputFile: ".pi/team/run-1/task-1.md",
+            progressFile: ".pi/team/run-1/task-1.progress.md",
+            readFiles: ["README.md"],
+          },
+          worktree: { worktreePath: "/tmp/team-task-1" },
+        }),
+      },
+    );
+
+    const reparsed = JSON.parse(JSON.stringify(summary));
+
+    expect(reparsed).toMatchObject({
+      goal: "Document the team mode contract",
+      taskCount: 1,
+      completedCount: 1,
+      failedCount: 0,
+      blockedCount: 0,
+      success: true,
+      ok: true,
+      tasks: [
+        {
+          id: "task-1",
+          owner: "worker-1",
+          agent: "worker",
+          status: "completed",
+          artifactRefs: [
+            ".pi/team/run-1",
+            ".pi/team/run-1/task-1.md",
+            ".pi/team/run-1/task-1.progress.md",
+            "README.md",
+          ],
+          worktreeRefs: ["/tmp/team-task-1"],
+        },
+      ],
+      verificationEvidence: {
+        checksRun: ["task-1: pi worker execution"],
+        passed: true,
+        failed: false,
+        passedChecks: ["task-1: worker completed"],
+        failedChecks: [],
+      },
+    });
+  });
+
   it("marks the run failed when any worker fails", async () => {
     const summary = await runTeam(
       { goal: "Ship lightweight native team mode", workerCount: 2, agent: "worker" },
@@ -129,5 +182,31 @@ describe("runTeam", () => {
     expect(summary.finalSynthesis).toContain("boom");
     expect(summary.verificationEvidence.passed).toBe(false);
     expect(summary.verificationEvidence.failed).toBe(true);
+  });
+
+  it("formats structured verification evidence without dropping refs or failure details", () => {
+    const [task] = createDefaultTeamTasks("Summarize partial run", 1, "worker");
+    task.status = "failed";
+    task.resultSummary = "worker reported incomplete verification";
+    task.errorMessage = "verification failed";
+    task.artifactRefs = [".pi/team/task-1.md"];
+    task.worktreeRefs = ["/tmp/team-task-1"];
+
+    const summary = synthesizeTeamRun("Summarize partial run", task ? [task] : [], [
+      fakeResult("worker", "prompt", "worker reported incomplete verification", {
+        exitCode: 1,
+        errorMessage: "verification failed",
+      }),
+    ]);
+
+    const formatted = formatTeamRunSummary(summary);
+
+    expect(formatted).toContain("Team finished with failures");
+    expect(formatted).toContain("checksRun: task-1: pi worker execution");
+    expect(formatted).toContain("passed: false (none)");
+    expect(formatted).toContain("failed: true (task-1: verification failed)");
+    expect(formatted).toContain("artifactRefs: .pi/team/task-1.md");
+    expect(formatted).toContain("worktreeRefs: /tmp/team-task-1");
+    expect(formatted).toContain("MVP team mode uses dependency-free parallel-batch task records");
   });
 });
