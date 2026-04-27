@@ -18,6 +18,7 @@ import { convertToLlm, serializeConversation } from "@mariozechner/pi-coding-age
 import { complete } from "@mariozechner/pi-ai";
 import { isDisciplineAgent, augmentAgentWithKarpathy, getSlopCleanerTask } from "./discipline.js";
 import { fetchUrlToMarkdown } from "./webfetch/utils.js";
+import { PI_TEAM_WORKER_ENV, formatTeamRunSummary, runTeam } from "./team.js";
 import { renderWebfetchCall, renderWebfetchResult } from "./webfetch/render.js";
 import { getDefaultApprovalStore } from "./sandbox/approval-store.js";
 import { parseSandboxApprovalMode } from "./sandbox/approval-mode.js";
@@ -51,6 +52,7 @@ export default function (pi: ExtensionAPI) {
 
   const depthConfig = resolveDepthConfig();
   const isRootSession = depthConfig.currentDepth === 0;
+  const isTeamWorker = process.env[PI_TEAM_WORKER_ENV] === "1";
   const parsedApprovalMode = parseSandboxApprovalMode(process.env.PI_SANDBOX_APPROVAL_MODE);
   let warnedInvalidApprovalMode = false;
   let announcedAlwaysApprovalMode = false;
@@ -223,7 +225,96 @@ export default function (pi: ExtensionAPI) {
 
   const makeDetails = (mode: "single" | "parallel") => (results: SingleResult[]): SubagentDetails => ({ mode, results });
 
-  if (depthConfig.canDelegate) {
+  const TeamParams = Type.Object({
+    goal: Type.String({ description: "Goal for the lightweight native team run" }),
+    workerCount: Type.Optional(Type.Number({ description: `Number of workers to dispatch (max ${MAX_PARALLEL_TASKS})` })),
+    agent: Type.Optional(Type.String({ description: "Worker agent name. Default: worker" })),
+    agentScope: Type.Optional(Type.Unsafe<"user" | "project" | "both">({
+      type: "string", enum: ["user", "project", "both"],
+      description: 'Which agent directories to search. Default: "user".',
+      default: "user",
+    })),
+    worktree: Type.Optional(Type.Boolean({ description: "Run team workers in isolated git worktrees" })),
+    maxOutput: Type.Optional(Type.Number({ description: "Maximum characters of model-facing worker output to retain" })),
+  });
+
+  if (isRootSession && !isTeamWorker) {
+    pi.registerTool({
+      name: "team",
+      label: "Team",
+      description: "Run a lightweight native team over existing pi subagents with structured task synthesis.",
+      promptSnippet: "Coordinate a small team of bounded pi worker agents",
+      promptGuidelines: [
+        "Use team for coordinated multi-agent execution when a goal can be split into independent bounded tasks.",
+        "Prefer small worker counts for the MVP; max parallel tasks is 12 with 10 concurrent.",
+        "Workers must not recursively orchestrate or spawn subagents.",
+        "Use subagent directly for simple one-off parallel dispatch without team synthesis.",
+      ],
+      parameters: TeamParams,
+      execute: async (_toolCallId, params, signal, onUpdate, ctx) => {
+        const { goal, workerCount, agent, agentScope, worktree, maxOutput } = params;
+        const defaultCwd = ctx.cwd;
+        const hasUI = (ctx as any).hasUI !== false && !!ctx?.ui?.select;
+        const agents = await discoverAgents(defaultCwd, agentScope || "user", BUNDLED_AGENTS_DIR);
+        const findAgent = (name: string) => agents.find((a) => a.name === name);
+        const approvalResolver = async (request: { reason: string; command: string; args: string[]; cwd: string }) => {
+          if (parsedApprovalMode.mode === "always") return { approved: true, scope: "session" as const };
+          if (parsedApprovalMode.mode === "deny") return { approved: false };
+          if (!hasUI) return { approved: false };
+          const message = [
+            "Sandbox escalation required to run unsandboxed.",
+            `Reason: ${request.reason}`,
+            `Command: ${request.command} ${request.args.join(" ")}`.trim(),
+          ].join("\n");
+          const choice = await ctx.ui.select(message, ["Deny", "Allow once", "Allow for session", "Always allow"], { signal });
+          if (choice === "Allow once") return { approved: true, scope: "once" as const };
+          if (choice === "Allow for session") return { approved: true, scope: "session" as const };
+          if (choice === "Always allow") return { approved: true, scope: "always" as const };
+          return { approved: false };
+        };
+        const sandboxFor = (runCwd: string) => ({
+          enabled: true,
+          workspaceRoot: defaultCwd,
+          networkMode: "on" as const,
+          additionalWritableRoots: [agentDir, runCwd],
+          approvalMode: parsedApprovalMode.mode,
+          approvalResolver,
+          approvalStore,
+          requireApprovalForAllCommands: true,
+        });
+        const summary = await runTeam({ goal, workerCount, agent, worktree, maxOutput }, {
+          findAgent,
+          summarizeResult: getResultSummaryText,
+          emitProgress: (partial) => onUpdate?.({
+            content: [{ type: "text" as const, text: `Team: ${partial.completedCount}/${partial.taskCount} completed, ${partial.failedCount} failed...` }],
+            details: makeDetails("parallel")([]),
+          }),
+          runTask: (input) => runAgent({
+            agent: input.agent ? { ...input.agent, maxSubagentDepth: 1 } : undefined,
+            agentName: input.agentName,
+            task: input.prompt,
+            cwd: defaultCwd,
+            depthConfig,
+            signal,
+            sandbox: sandboxFor(defaultCwd),
+            onUpdate,
+            makeDetails: makeDetails("parallel"),
+            maxOutput: input.maxOutput,
+            contextMode: "fresh",
+            worktree: input.worktree,
+            extraEnv: input.extraEnv,
+          }),
+        });
+        return {
+          content: [{ type: "text" as const, text: formatTeamRunSummary(summary) }],
+          details: makeDetails("parallel")([]),
+          isError: !summary.success,
+        };
+      },
+    });
+  }
+
+  if (depthConfig.canDelegate && !isTeamWorker) {
     pi.registerTool({
       name: "subagent",
       label: "Subagent",
@@ -670,7 +761,7 @@ export default function (pi: ExtensionAPI) {
     const guidance = (isRootSession && !isSkillInvocation) ? PHASE_GUIDANCE[currentPhase] : "";
 
     let delegationInfo = "";
-    if (depthConfig.canDelegate) {
+    if (depthConfig.canDelegate && !isTeamWorker) {
       const agentList = (await discoverAgents(_ctx.cwd || ".", "user", BUNDLED_AGENTS_DIR))
         .map((a) => `- **${a.name}**: ${a.description}`)
         .join("\n");
