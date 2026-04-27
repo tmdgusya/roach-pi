@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { createBashTool, isToolCallEventType, keyHint, keyText, rawKeyHint } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 import { RoachFooter, type CacheStats, type ActiveTools } from "./footer.js";
 import { homedir } from "os";
 import { join, dirname, resolve } from "path";
@@ -18,8 +18,9 @@ import { convertToLlm, serializeConversation } from "@mariozechner/pi-coding-age
 import { complete } from "@mariozechner/pi-ai";
 import { isDisciplineAgent, augmentAgentWithKarpathy, getSlopCleanerTask } from "./discipline.js";
 import { fetchUrlToMarkdown } from "./webfetch/utils.js";
-import { PI_TEAM_WORKER_ENV, formatTeamRunSummary, runTeam } from "./team.js";
-import { defaultTeamRunStateRoot, readTeamRunRecord, writeTeamRunRecord } from "./team-state.js";
+import { PI_TEAM_WORKER_ENV, formatTeamRunSummary, runTeam, type TeamRunSummary } from "./team.js";
+import { defaultTeamRunStateRoot, listTeamRuns, readTeamRunRecord, writeTeamRunRecord } from "./team-state.js";
+import { buildTeamCommandPrompt, getTeamArgumentCompletions, parseTeamArgs } from "./team-command.js";
 import { renderWebfetchCall, renderWebfetchResult } from "./webfetch/render.js";
 import { getDefaultApprovalStore } from "./sandbox/approval-store.js";
 import { parseSandboxApprovalMode } from "./sandbox/approval-mode.js";
@@ -304,7 +305,11 @@ export default function (pi: ExtensionAPI) {
           approvalStore,
           requireApprovalForAllCommands: true,
         });
-        const summary = await runTeam({ goal, workerCount, agent, worktree, worktreePolicy, backend, maxOutput, runId, resumeRunId, resumeMode, staleTaskMs }, {
+        const indicatorSupported = hasUI && typeof ctx?.ui?.setWorkingIndicator === "function";
+        if (indicatorSupported) ctx.ui.setWorkingIndicator({ frames: [] });
+        let summary: TeamRunSummary;
+        try {
+          summary = await runTeam({ goal, workerCount, agent, worktree, worktreePolicy, backend, maxOutput, runId, resumeRunId, resumeMode, staleTaskMs }, {
           findAgent,
           summarizeResult: getResultSummaryText,
           persistRun: async (record) => {
@@ -341,10 +346,14 @@ export default function (pi: ExtensionAPI) {
             extraEnv: input.extraEnv,
           }),
         });
+        } finally {
+          if (indicatorSupported) ctx.ui.setWorkingIndicator();
+        }
         return {
           content: [{ type: "text" as const, text: formatTeamRunSummary(summary) }],
           details: makeDetails("parallel")([]),
           isError: !summary.success,
+          terminate: summary.success,
         };
       },
     });
@@ -1372,6 +1381,41 @@ export default function (pi: ExtensionAPI) {
       activeGoalDocument = null;
       ctx.ui.setStatus("harness", undefined);
       ctx.ui.notify("Workflow phase reset to idle.", "info");
+    },
+  });
+
+  pi.registerCommand("team", {
+    description:
+      "Kick off a lightweight native team run — usage: /team goal=\"...\" [agent=worker] [backend=auto|native|tmux] [worker-count=N] [worktree-policy=off|on|auto] [resume=runId] [resume-mode=mark-interrupted|retry-stale] [max-output=N]",
+    getArgumentCompletions: async (argumentPrefix) => {
+      try {
+        return await getTeamArgumentCompletions(argumentPrefix, {
+          listAgents: async () => {
+            const found = await discoverAgents(process.cwd(), "user", BUNDLED_AGENTS_DIR);
+            return found.map((a) => a.name);
+          },
+          listResumeRuns: async () => {
+            const records = await listTeamRuns(defaultTeamRunStateRoot(process.cwd()));
+            return records.map((r) => ({ runId: r.runId, status: r.status ?? "unknown" }));
+          },
+        });
+      } catch {
+        return null;
+      }
+    },
+    handler: async (args, ctx) => {
+      const parsed = parseTeamArgs(args ?? "");
+      if (!parsed.goal) {
+        ctx.ui.notify("/team requires a goal. Example: /team goal=\"build the API client\" agent=worker", "error");
+        return;
+      }
+      const ok = await ctx.ui.confirm(
+        "Start Team Run",
+        `Dispatch a bounded team toward the goal:\n\n${parsed.goal}\n\nProceed?`,
+      );
+      if (!ok) return;
+      ctx.ui.setStatus("harness", "Team run in progress...");
+      pi.sendUserMessage(buildTeamCommandPrompt(parsed));
     },
   });
 
