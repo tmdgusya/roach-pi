@@ -127,3 +127,35 @@ npm run test
 ```
 
 12 tests covering tool registration, command delegation, event handlers, and ask_user_question behavior (free-text, multi-choice, direct input fallback, cancellation).
+
+## Lightweight Native Team Mode
+
+The `team` tool coordinates a small, bounded group of existing pi subagents without requiring a tmux worker runtime. It is only available in the root session. A team run accepts a `goal`, optional `workerCount`, optional worker `agent` (default: `worker`), optional `worktree`, and optional `maxOutput`.
+
+Example tool invocation shape:
+
+```json
+{
+  "goal": "Implement a focused feature and verify it",
+  "workerCount": 2,
+  "agent": "worker",
+  "worktree": true
+}
+```
+
+MVP behavior:
+
+- The goal is decomposed into dependency-free parallel-batch task records.
+- Each worker receives explicit lead/worker separation instructions and must report changed files, verification, and blockers.
+- Team workers run with `PI_TEAM_WORKER=1`; recursive orchestration tools such as `team` and `subagent` are suppressed in that context.
+- The final result includes per-task status, success/failure counts, worker output summaries, and structured verification evidence.
+- If any worker fails, the team run is reported as failed/partial rather than full success.
+
+Deferred parity milestones:
+
+- persistent resume and file-backed run recovery
+- worker inbox/outbox messaging
+- heartbeat/status monitoring
+- full staged team pipeline (`plan -> prd -> exec -> verify -> fix`)
+- tmux pane runtime/visualization
+- default worktree-per-worker orchestration policy

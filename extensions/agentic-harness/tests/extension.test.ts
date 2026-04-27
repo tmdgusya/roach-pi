@@ -96,6 +96,33 @@ describe("Extension Registration", () => {
     }
   });
 
+  it("should register team tool in root session", () => {
+    const { mockPi, tools } = createMockPi();
+    extension(mockPi);
+
+    const tool = tools.get("team");
+    expect(tool).toBeDefined();
+    expect(tool.name).toBe("team");
+    expect(tool.promptGuidelines.length).toBeGreaterThan(0);
+  });
+
+  it("should NOT register team tool in subagent context", () => {
+    process.env.PI_SUBAGENT_DEPTH = "1";
+    const { mockPi, tools } = createMockPi();
+    extension(mockPi);
+
+    expect(tools.get("team")).toBeUndefined();
+  });
+
+  it("should NOT register team or subagent tools in team-worker context", () => {
+    process.env.PI_TEAM_WORKER = "1";
+    const { mockPi, tools } = createMockPi();
+    extension(mockPi);
+
+    expect(tools.get("team")).toBeUndefined();
+    expect(tools.get("subagent")).toBeUndefined();
+  });
+
   it("should register subagent tool", () => {
     const { mockPi, tools } = createMockPi();
     extension(mockPi);
