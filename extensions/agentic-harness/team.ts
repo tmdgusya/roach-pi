@@ -1,10 +1,19 @@
 import type { AgentConfig } from "./agents.js";
 import { MAX_CONCURRENCY, MAX_PARALLEL_TASKS, mapWithConcurrencyLimit } from "./subagent.js";
 import { getResultSummaryText, isResultSuccess, type SingleResult } from "./types.js";
+import {
+  createTeamRunRecord,
+  generateTeamRunId,
+  markStaleRunningTasks,
+  recordTeamEvent,
+  setTeamRunStatus,
+  type StaleTaskResumeMode,
+  type TeamRunRecord,
+} from "./team-state.js";
 
 export const PI_TEAM_WORKER_ENV = "PI_TEAM_WORKER";
 
-export type TeamTaskStatus = "pending" | "in_progress" | "completed" | "failed" | "blocked";
+export type TeamTaskStatus = "pending" | "in_progress" | "completed" | "failed" | "blocked" | "interrupted";
 
 export interface TeamTask {
   id: string;
@@ -18,6 +27,9 @@ export interface TeamTask {
   artifactRefs: string[];
   worktreeRefs: string[];
   errorMessage?: string;
+  startedAt?: string;
+  updatedAt?: string;
+  completedAt?: string;
 }
 
 export interface TeamRunOptions {
@@ -26,6 +38,10 @@ export interface TeamRunOptions {
   agent?: string;
   worktree?: boolean;
   maxOutput?: number;
+  runId?: string;
+  resumeRunId?: string;
+  resumeMode?: StaleTaskResumeMode;
+  staleTaskMs?: number;
 }
 
 export interface TeamVerificationEvidence {
@@ -67,6 +83,9 @@ export interface TeamRuntime {
   runTask(input: TeamRunTaskInput, index: number): Promise<SingleResult>;
   summarizeResult?(result: SingleResult, maxOutput?: number): string;
   emitProgress?(summary: TeamRunSummary): void;
+  persistRun?(record: TeamRunRecord): void | Promise<void>;
+  loadRun?(runId: string): TeamRunRecord | Promise<TeamRunRecord>;
+  now?(): string;
 }
 
 const WORKER_PROTOCOL = [
@@ -153,7 +172,7 @@ function createEvidence(tasks: TeamTask[], results: SingleResult[]): TeamVerific
     .filter((task) => task.status === "completed")
     .map((task) => `${task.id}: worker completed`);
   const failedChecks = tasks
-    .filter((task) => task.status === "failed" || task.status === "blocked")
+    .filter((task) => task.status === "failed" || task.status === "blocked" || task.status === "interrupted")
     .map((task) => `${task.id}: ${task.errorMessage || task.status}`);
   const checksRun = results.map((result, index) => `${tasks[index]?.id ?? `task-${index + 1}`}: pi worker execution`);
   return {
@@ -175,7 +194,8 @@ export function synthesizeTeamRun(goal: string, tasks: TeamTask[], results: Sing
   const completedCount = tasks.filter((task) => task.status === "completed").length;
   const failedCount = tasks.filter((task) => task.status === "failed").length;
   const blockedCount = tasks.filter((task) => task.status === "blocked").length;
-  const success = tasks.length > 0 && completedCount === tasks.length && failedCount === 0 && blockedCount === 0;
+  const interruptedCount = tasks.filter((task) => task.status === "interrupted" || task.status === "in_progress").length;
+  const success = tasks.length > 0 && completedCount === tasks.length && failedCount === 0 && blockedCount === 0 && interruptedCount === 0;
   const verificationEvidence = createEvidence(tasks, results);
   const taskLines = tasks.map((task) => [
     `- ${task.id} (${task.owner}, ${task.agent}): ${task.status}`,
@@ -199,6 +219,7 @@ export function synthesizeTeamRun(goal: string, tasks: TeamTask[], results: Sing
       `- checksRun: ${verificationEvidence.checksRun.length}`,
       `- passed: ${verificationEvidence.passed}`,
       `- failed: ${verificationEvidence.failed}`,
+      interruptedCount ? `- interrupted/running: ${interruptedCount}` : undefined,
     ].join("\n"),
     verificationEvidence,
   };
@@ -219,23 +240,63 @@ export function formatTeamRunSummary(summary: TeamRunSummary): string {
   ].join("\n");
 }
 
+async function persistIfEnabled(runtime: TeamRuntime, record: TeamRunRecord): Promise<void> {
+  await runtime.persistRun?.(record);
+}
+
+function terminalTaskStatus(status: TeamTaskStatus): boolean {
+  return status === "completed" || status === "failed" || status === "blocked" || status === "interrupted";
+}
+
 export async function runTeam(opts: TeamRunOptions, runtime: TeamRuntime): Promise<TeamRunSummary> {
   const agentName = opts.agent || "worker";
-  const tasks = createDefaultTeamTasks(opts.goal, opts.workerCount, agentName);
+  const now = runtime.now ?? (() => new Date().toISOString());
+  const initialNow = now();
+  const isResume = !!opts.resumeRunId;
+  let record = isResume && runtime.loadRun
+    ? await runtime.loadRun(opts.resumeRunId as string)
+    : createTeamRunRecord({
+      runId: opts.runId || generateTeamRunId(),
+      goal: opts.goal,
+      options: opts,
+      tasks: createDefaultTeamTasks(opts.goal, opts.workerCount, agentName),
+      now: initialNow,
+    });
+
+  if (isResume) {
+    record = recordTeamEvent(record, { type: "run_resumed", createdAt: initialNow, message: `Resumed as ${opts.resumeRunId}` });
+    record = markStaleRunningTasks(record, { now: initialNow, staleTaskMs: opts.staleTaskMs, mode: opts.resumeMode });
+  }
+
+  const tasks = record.tasks;
   try {
     validateTeamTasks(tasks);
   } catch (err) {
     const invalidDependency = tasks.find((task) => task.blockedBy.length > 0);
     if (invalidDependency) {
       invalidDependency.status = "blocked";
+      invalidDependency.updatedAt = now();
       invalidDependency.errorMessage = err instanceof Error ? err.message : "MVP team mode only supports dependency-free parallel batches.";
+      record = recordTeamEvent(record, { type: "task_failed", taskId: invalidDependency.id, createdAt: invalidDependency.updatedAt, message: invalidDependency.errorMessage });
     }
-    return synthesizeTeamRun(opts.goal, tasks, [], opts.maxOutput);
+    const summary = synthesizeTeamRun(record.goal, tasks, [], opts.maxOutput);
+    record = setTeamRunStatus(record, "failed", now(), summary);
+    await persistIfEnabled(runtime, record);
+    return summary;
   }
 
-  const results = await mapWithConcurrencyLimit(tasks, MAX_CONCURRENCY, async (task, index) => {
+  record = setTeamRunStatus(record, "running", now());
+  await persistIfEnabled(runtime, record);
+
+  const runnableTasks = tasks.filter((task) => task.status === "pending");
+  const results = await mapWithConcurrencyLimit(runnableTasks, MAX_CONCURRENCY, async (task, index) => {
+    const startedAt = now();
     task.status = "in_progress";
-    runtime.emitProgress?.(synthesizeTeamRun(opts.goal, tasks, [], opts.maxOutput));
+    task.startedAt = task.startedAt || startedAt;
+    task.updatedAt = startedAt;
+    record = recordTeamEvent(record, { type: "task_started", taskId: task.id, createdAt: startedAt });
+    await persistIfEnabled(runtime, record);
+    runtime.emitProgress?.(synthesizeTeamRun(record.goal, tasks, [], opts.maxOutput));
     const result = await runtime.runTask({
       task,
       prompt: buildTeamWorkerPrompt(task, opts),
@@ -254,15 +315,30 @@ export async function runTeam(opts: TeamRunOptions, runtime: TeamRuntime): Promi
     const refs = taskRefs(result);
     task.artifactRefs = refs.artifactRefs;
     task.worktreeRefs = refs.worktreeRefs;
+    const completedAt = now();
+    task.updatedAt = completedAt;
+    task.completedAt = completedAt;
     if (isResultSuccess(result)) {
       task.status = "completed";
+      record = recordTeamEvent(record, { type: "task_completed", taskId: task.id, createdAt: completedAt });
     } else {
       task.status = "failed";
       task.errorMessage = result.errorMessage || result.stderr || `exitCode ${result.exitCode}`;
+      record = recordTeamEvent(record, { type: "task_failed", taskId: task.id, createdAt: completedAt, message: task.errorMessage });
     }
-    runtime.emitProgress?.(synthesizeTeamRun(opts.goal, tasks, [result], opts.maxOutput));
+    await persistIfEnabled(runtime, record);
+    runtime.emitProgress?.(synthesizeTeamRun(record.goal, tasks, [result], opts.maxOutput));
     return result;
   });
 
-  return synthesizeTeamRun(opts.goal, tasks, results, opts.maxOutput);
+  const summary = synthesizeTeamRun(record.goal, tasks, results, opts.maxOutput);
+  const finalStatus = summary.success
+    ? "completed"
+    : tasks.some((task) => task.status === "interrupted" || task.status === "in_progress")
+      ? "interrupted"
+      : "failed";
+  record = recordTeamEvent(record, { type: summary.success ? "run_completed" : "run_failed", createdAt: now() });
+  record = setTeamRunStatus(record, finalStatus, now(), summary);
+  await persistIfEnabled(runtime, record);
+  return summary;
 }
