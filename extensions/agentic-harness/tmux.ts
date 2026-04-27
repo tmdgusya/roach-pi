@@ -1,6 +1,7 @@
-import { execFile } from "child_process";
+import { execFile, type ExecFileOptions } from "child_process";
 import { mkdir } from "fs/promises";
 import { join } from "path";
+import { shellQuote } from "./shell.js";
 
 export interface TmuxAvailability {
   available: boolean;
@@ -27,7 +28,7 @@ export interface CreateWorkerPanesOptions {
 export type TmuxCommandRunner = (
   file: string,
   args: readonly string[],
-  options: Record<string, never>,
+  options: ExecFileOptions,
   callback: (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => void,
 ) => void;
 
@@ -36,10 +37,6 @@ function runCommand(commandRunner: TmuxCommandRunner, file: string, args: readon
     commandRunner(file, args, {}, (error, stdout, stderr) => {
       if (error) {
         reject(error);
-        return;
-      }
-      if (stderr && stderr.toString().trim().length > 0) {
-        reject(new Error(stderr.toString()));
         return;
       }
       resolve(stdout.toString());
@@ -89,7 +86,7 @@ async function pipePane(
   paneId: string,
   logFile: string,
 ): Promise<void> {
-  await runCommand(commandRunner, binary, ["pipe-pane", "-t", paneId, "-o", `cat >> ${logFile}`]);
+  await runCommand(commandRunner, binary, ["pipe-pane", "-t", paneId, "-o", `cat >> ${shellQuote(logFile)}`]);
 }
 
 export async function createWorkerPanes(options: CreateWorkerPanesOptions): Promise<TmuxPaneRef[]> {

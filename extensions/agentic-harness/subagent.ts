@@ -15,6 +15,7 @@ import { getInheritedCliArgs } from "./runner-cli.js";
 import { getDefaultApprovalStore } from "./sandbox/approval-store.js";
 import { resolveSandboxLaunch } from "./sandbox/executor.js";
 import type { SandboxRuntimeOptions } from "./sandbox/types.js";
+import { shellQuote } from "./shell.js";
 
 export const MAX_PARALLEL_TASKS = 12;
 export const MAX_CONCURRENCY = 10;
@@ -248,10 +249,6 @@ export interface RunAgentOptions {
 }
 
 const TMUX_EXIT_MARKER = "__PI_TMUX_EXIT:";
-
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
 
 function execFileAsync(file: string, args: readonly string[]): Promise<void> {
   return new Promise((resolve, reject) => {

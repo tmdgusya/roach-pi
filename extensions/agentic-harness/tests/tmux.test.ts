@@ -39,32 +39,43 @@ describe("tmux helpers", () => {
     expect(calls).toEqual([{ file: "which", args: ["tmux"] }]);
   });
 
+  it("succeeds when command stderr contains warnings without an execution error", async () => {
+    const calls: Array<{ file: string; args: string[] }> = [];
+    const runner: TmuxCommandRunner = (file, args, _options, callback) => {
+      calls.push({ file, args: [...args] });
+      callback(null, "/usr/bin/tmux\n", "warning\n");
+    };
+
+    await expect(detectTmux(runner)).resolves.toEqual({ available: true, binary: "/usr/bin/tmux" });
+    expect(calls).toEqual([{ file: "which", args: ["tmux"] }]);
+  });
+
   it("constructs deterministic pane creation and logging commands", async () => {
     const { runner, calls } = createMockRunner(["%1\n", "", "%2\n", "", ""]);
 
     await expect(
-      createWorkerPanes({ runId: "team-demo", workerCount: 2, logDir: "/tmp/pi-team", commandRunner: runner }),
+      createWorkerPanes({ runId: "team-demo", workerCount: 2, logDir: "/tmp/John Doe/a;b", commandRunner: runner }),
     ).resolves.toEqual([
       {
         sessionName: "pi-team-demo",
         windowName: "workers",
         paneId: "%1",
         attachCommand: "tmux attach -t pi-team-demo",
-        logFile: "/tmp/pi-team/task-1.log",
+        logFile: "/tmp/John Doe/a;b/task-1.log",
       },
       {
         sessionName: "pi-team-demo",
         windowName: "workers",
         paneId: "%2",
         attachCommand: "tmux attach -t pi-team-demo",
-        logFile: "/tmp/pi-team/task-2.log",
+        logFile: "/tmp/John Doe/a;b/task-2.log",
       },
     ]);
     expect(calls).toEqual([
       { file: "tmux", args: ["new-session", "-d", "-s", "pi-team-demo", "-n", "workers", "-P", "-F", "#{pane_id}"] },
-      { file: "tmux", args: ["pipe-pane", "-t", "%1", "-o", "cat >> /tmp/pi-team/task-1.log"] },
+      { file: "tmux", args: ["pipe-pane", "-t", "%1", "-o", "cat >> '/tmp/John Doe/a;b/task-1.log'"] },
       { file: "tmux", args: ["split-window", "-t", "pi-team-demo:workers", "-P", "-F", "#{pane_id}"] },
-      { file: "tmux", args: ["pipe-pane", "-t", "%2", "-o", "cat >> /tmp/pi-team/task-2.log"] },
+      { file: "tmux", args: ["pipe-pane", "-t", "%2", "-o", "cat >> '/tmp/John Doe/a;b/task-2.log'"] },
       { file: "tmux", args: ["select-layout", "-t", "pi-team-demo:workers", "tiled"] },
     ]);
   });
