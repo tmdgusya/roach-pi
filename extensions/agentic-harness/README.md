@@ -56,6 +56,82 @@ Then use the slash commands:
 
 The `ask_user_question` tool is also available to the agent at all times — it will ask you questions autonomously whenever it detects ambiguity, even outside of `/clarify` mode.
 
+
+
+## Lightweight Native Team Mode
+
+The `team` tool coordinates a small, bounded batch of existing pi subagents from the root session. Use it when a goal can be split into independent worker assignments and you want one synthesized result with task lifecycle status and explicit verification evidence. Use `subagent` directly for one-off delegation when you do not need team task records, lifecycle status, or final synthesis.
+
+Example tool invocation shape:
+
+```json
+{
+  "goal": "Implement the API client and update its tests",
+  "workerCount": 2,
+  "agent": "worker",
+  "worktree": false,
+  "worktreePolicy": "off",
+  "backend": "auto",
+  "maxOutput": 6000
+}
+```
+
+Parameters:
+
+| Field | Required | Notes |
+|---|---:|---|
+| `goal` | yes | Root-level objective to split into dependency-free worker tasks. |
+| `workerCount` | no | Number of workers to dispatch; defaults to a small batch and is clamped by the tool. |
+| `agent` | no | Worker agent name; defaults to `worker`. |
+| `worktree` | no | When `true`, asks the existing subagent runner to isolate worker edits in git worktrees. |
+| `worktreePolicy` | no | Explicit worktree isolation policy: `off`, `on`, or `auto`. Defaults to legacy `worktree` boolean behavior. |
+| `backend` | no | Execution backend selection: `auto`, `native`, or `tmux`. Defaults to `auto`. |
+| `maxOutput` | no | Maximum characters of model-facing worker output retained in the final synthesis. |
+| `runId` | no | Optional durable run id for persisted team state. |
+| `resumeRunId` | no | Resume a previously persisted team run. |
+| `resumeMode` | no | Resume behavior for stale in-progress tasks: `mark-interrupted` or `retry-stale`. |
+| `staleTaskMs` | no | Age threshold for stale in-progress tasks during resume. |
+
+### MVP behavior and stable summary contract
+
+- Creates dependency-free parallel-batch task records; this MVP is not a dependency scheduler.
+- `backend: "auto"` (default) prefers tmux when the binary is available and otherwise falls back to the native JSON subprocess backend.
+- `backend: "native"` uses the existing JSON subprocess backend without tmux.
+- `backend: "tmux"` requires tmux and records attach metadata for each worker pane.
+- When `team` runs inside an existing tmux client, worker panes open automatically in the current tmux window; otherwise attach to a detached tmux-backed run with `tmux attach -t <session>`.
+- Failed tmux team runs intentionally leave tmux panes/sessions alive for debugging. Detached runs can be inspected with `tmux ls` and cleaned up with `tmux kill-session -t <session>`.
+- If a tmux session collision occurs, retry sessions may use a suffixed session name; the actual attach command is recorded in the run summary and persisted state.
+- The tmux backend runs the resolved sandbox command inside a tmux pane. Treat sandbox parity as tested for wrapper invocation, not as pane embedding isolation.
+- Operator interaction happens through the existing tmux client and pane controls; detached runs still use tmux attach/switch-pane rather than a new pi-side control channel.
+- Dispatches workers through the selected backend and preserves normal subagent depth/cycle safeguards.
+- Runs team workers with `PI_TEAM_WORKER=1`, which suppresses recursive orchestration tools such as `team` and `subagent` inside workers.
+- Returns a `TeamRunSummary` with stable user-facing fields: `goal`, `ok`/`success`, `completedCount`, `failedCount`, `tasks`, `finalSynthesis`, and `verificationEvidence`.
+- Keeps each task's status, owner, output summary, artifact references, and worktree references when present.
+- Can persist durable run records under `.pi/agent/runs/<runId>/team-run.json`, including task lifecycle events and recorded inbox/outbox messages.
+- Can conservatively resume persisted runs by preserving terminal task state and marking stale in-progress tasks interrupted unless explicitly retried.
+- Reports the run as incomplete/failed when any worker fails; partial worker success must not be synthesized as full team success.
+
+### Deferred parity milestones
+
+The lightweight team implementation intentionally defers heavier team-runtime features until they are implemented and tested:
+
+- Live worker chat/control beyond recorded inbox/outbox messages
+- Rich heartbeat/status dashboards beyond persisted run snapshots
+- Full staged pipelines such as plan → PRD → exec → verify → fix
+- In-pi pane embedding and direct pi-side keystroke routing to workers
+- Default worktree-per-worker isolation policy; use `worktree`/`worktreePolicy` explicitly for now
+
+### Verification and release checklist
+
+Before declaring a team-mode change complete, run from `extensions/agentic-harness`:
+
+```bash
+npm test
+npm run build
+```
+
+There is currently no `lint` script in `extensions/agentic-harness/package.json`; use the test/build gate plus manual docs review unless a lint script is added later. The test suite should cover task creation, worker prompt guardrails, worker-count clamping, success/failure synthesis, runtime suppression under `PI_TEAM_WORKER=1`, root tool registration, and the fake-runner e2e path. The build must pass with `tsc --noEmit`.
+
 ## Development
 
 1. Clone the repository:
@@ -72,7 +148,8 @@ The `ask_user_question` tool is also available to the agent at all times — it 
 ## Testing
 
 ```bash
-npm run test
+npm test
+npm run build
 ```
 
-12 tests covering tool registration, command delegation, event handlers, and ask_user_question behavior (free-text, multi-choice, direct input fallback, cancellation).
+The extension test suite covers command delegation, event handlers, ask_user_question behavior, subagent/team registration, and lightweight team-mode synthesis. `npm run build` runs `tsc --noEmit`.
