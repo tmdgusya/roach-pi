@@ -98,11 +98,11 @@ Parameters:
 - `backend: "auto"` (default) prefers tmux when the binary is available and otherwise falls back to the native JSON subprocess backend.
 - `backend: "native"` uses the existing JSON subprocess backend without tmux.
 - `backend: "tmux"` requires tmux and records attach metadata for each worker pane.
-- Attach to a tmux-backed run with `tmux attach -t <session>`; summaries and task metadata include the concrete attach command.
-- Failed tmux team runs intentionally leave sessions alive for debugging. Operators can inspect them with `tmux ls` and clean them up with `tmux kill-session -t <session>`.
+- When `team` runs inside an existing tmux client, worker panes open automatically in the current tmux window; otherwise attach to a detached tmux-backed run with `tmux attach -t <session>`.
+- Failed tmux team runs intentionally leave tmux panes/sessions alive for debugging. Detached runs can be inspected with `tmux ls` and cleaned up with `tmux kill-session -t <session>`.
 - If a tmux session collision occurs, retry sessions may use a suffixed session name; the actual attach command is recorded in the run summary and persisted state.
 - The tmux backend runs the resolved sandbox command inside a tmux pane. Treat sandbox parity as tested for wrapper invocation, not as pane embedding isolation.
-- Operator interaction happens through tmux attach/switch-pane, not through a new pi-side control channel.
+- Operator interaction happens through the existing tmux client and pane controls; detached runs still use tmux attach/switch-pane rather than a new pi-side control channel.
 - Dispatches workers through the selected backend and preserves normal subagent depth/cycle safeguards.
 - Runs team workers with `PI_TEAM_WORKER=1`, which suppresses recursive orchestration tools such as `team` and `subagent` inside workers.
 - Returns a `TeamRunSummary` with stable user-facing fields: `goal`, `ok`/`success`, `completedCount`, `failedCount`, `tasks`, `finalSynthesis`, and `verificationEvidence`.

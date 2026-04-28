@@ -4,6 +4,7 @@ import {
   buildTmuxSessionName,
   createWorkerPanes,
   detectTmux,
+  killTmuxPane,
   killTmuxSession,
   parsePaneIds,
   parseTmuxAvailability,
@@ -54,7 +55,13 @@ describe("tmux helpers", () => {
     const { runner, calls } = createMockRunner(["%1\n", "", "%2\n", "", ""]);
 
     await expect(
-      createWorkerPanes({ runId: "team-demo", workerCount: 2, logDir: "/tmp/John Doe/a;b", commandRunner: runner }),
+      createWorkerPanes({
+        runId: "team-demo",
+        workerCount: 2,
+        logDir: "/tmp/John Doe/a;b",
+        commandRunner: runner,
+        env: {},
+      }),
     ).resolves.toEqual([
       {
         sessionName: "pi-team-demo",
@@ -62,6 +69,7 @@ describe("tmux helpers", () => {
         paneId: "%1",
         attachCommand: "tmux attach -t pi-team-demo",
         logFile: "/tmp/John Doe/a;b/task-1.log",
+        placement: "detached-session",
       },
       {
         sessionName: "pi-team-demo",
@@ -69,6 +77,7 @@ describe("tmux helpers", () => {
         paneId: "%2",
         attachCommand: "tmux attach -t pi-team-demo",
         logFile: "/tmp/John Doe/a;b/task-2.log",
+        placement: "detached-session",
       },
     ]);
     expect(calls).toEqual([
@@ -77,6 +86,45 @@ describe("tmux helpers", () => {
       { file: "tmux", args: ["split-window", "-t", "pi-team-demo:workers", "-P", "-F", "#{pane_id}"] },
       { file: "tmux", args: ["pipe-pane", "-t", "%2", "-o", "cat >> '/tmp/John Doe/a;b/task-2.log'"] },
       { file: "tmux", args: ["select-layout", "-t", "pi-team-demo:workers", "tiled"] },
+    ]);
+  });
+
+  it("splits worker panes into the current tmux window when already inside tmux", async () => {
+    const { runner, calls } = createMockRunner(["dev-session\nmain\n@3\n", "%11\n", "", "%12\n", "", ""]);
+
+    await expect(
+      createWorkerPanes({
+        runId: "team-demo",
+        workerCount: 2,
+        logDir: "/tmp/current-window",
+        commandRunner: runner,
+        env: { TMUX: "/tmp/tmux-1000/default,123,0", TMUX_PANE: "%9" },
+      }),
+    ).resolves.toEqual([
+      {
+        sessionName: "dev-session",
+        windowName: "main",
+        paneId: "%11",
+        attachCommand: "tmux attach -t dev-session",
+        logFile: "/tmp/current-window/task-1.log",
+        placement: "current-window",
+      },
+      {
+        sessionName: "dev-session",
+        windowName: "main",
+        paneId: "%12",
+        attachCommand: "tmux attach -t dev-session",
+        logFile: "/tmp/current-window/task-2.log",
+        placement: "current-window",
+      },
+    ]);
+    expect(calls).toEqual([
+      { file: "tmux", args: ["display-message", "-p", "-t", "%9", "#{session_name}\n#{window_name}\n#{window_id}"] },
+      { file: "tmux", args: ["split-window", "-t", "%9", "-P", "-F", "#{pane_id}"] },
+      { file: "tmux", args: ["pipe-pane", "-t", "%11", "-o", "cat >> '/tmp/current-window/task-1.log'"] },
+      { file: "tmux", args: ["split-window", "-t", "%9", "-P", "-F", "#{pane_id}"] },
+      { file: "tmux", args: ["pipe-pane", "-t", "%12", "-o", "cat >> '/tmp/current-window/task-2.log'"] },
+      { file: "tmux", args: ["select-layout", "-t", "@3", "tiled"] },
     ]);
   });
 
@@ -97,7 +145,14 @@ describe("tmux helpers", () => {
     const suffixGenerator = vi.fn(() => "retry1");
 
     await expect(
-      createWorkerPanes({ runId: "run", workerCount: 1, logDir: "/tmp/run", commandRunner: runner, suffixGenerator }),
+      createWorkerPanes({
+        runId: "run",
+        workerCount: 1,
+        logDir: "/tmp/run",
+        commandRunner: runner,
+        suffixGenerator,
+        env: {},
+      }),
     ).resolves.toEqual([
       {
         sessionName: "pi-run-attempt-retry1",
@@ -106,6 +161,7 @@ describe("tmux helpers", () => {
         attachCommand: "tmux attach -t pi-run-attempt-retry1",
         logFile: "/tmp/run/task-1.log",
         sessionAttempt: "retry1",
+        placement: "detached-session",
       },
     ]);
     expect(suffixGenerator).toHaveBeenCalledOnce();
@@ -118,10 +174,14 @@ describe("tmux helpers", () => {
     expect(calls.some((call) => call.args[0] === "kill-session")).toBe(false);
   });
 
-  it("kills tmux sessions best-effort", async () => {
+  it("kills tmux sessions and panes best-effort", async () => {
     const { runner, calls } = createMockRunner();
 
     await expect(killTmuxSession("pi-team-demo", runner)).resolves.toBeUndefined();
-    expect(calls).toEqual([{ file: "tmux", args: ["kill-session", "-t", "pi-team-demo"] }]);
+    await expect(killTmuxPane("%11", runner)).resolves.toBeUndefined();
+    expect(calls).toEqual([
+      { file: "tmux", args: ["kill-session", "-t", "pi-team-demo"] },
+      { file: "tmux", args: ["kill-pane", "-t", "%11"] },
+    ]);
   });
 });

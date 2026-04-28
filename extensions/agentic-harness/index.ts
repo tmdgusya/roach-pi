@@ -316,10 +316,43 @@ export default function (pi: ExtensionAPI) {
             await writeTeamRunRecord(record, teamRunStateRoot);
           },
           loadRun: (id) => readTeamRunRecord(id, teamRunStateRoot),
-          emitProgress: (partial) => onUpdate?.({
-            content: [{ type: "text" as const, text: `Team: ${partial.completedCount}/${partial.taskCount} completed, ${partial.failedCount} failed...` }],
-            details: makeDetails("parallel")([]),
-          }),
+          emitProgress: (partial) => {
+            const sessionName = partial.tasks.find((task) => task.terminal?.backend === "tmux" && task.terminal.sessionName)?.terminal?.sessionName;
+            const backendTag = partial.backendUsed === "tmux"
+              ? `[tmux: ${sessionName ?? "?"}]`
+              : "[native]";
+            onUpdate?.({
+              content: [{ type: "text" as const, text: `Team ${backendTag}: ${partial.completedCount}/${partial.taskCount} completed, ${partial.failedCount} failed...` }],
+              details: makeDetails("parallel")([]),
+            });
+          },
+          emitBackendResolved: (info) => {
+            if (!hasUI) return;
+            if (info.requested === "auto" && info.used === "native") {
+              ctx.ui.notify(
+                "Tmux not detected — running team workers natively. Set backend=tmux to require tmux.",
+                "info",
+              );
+            }
+          },
+          emitTmuxReady: (info) => {
+            if (!hasUI) return;
+            ctx.ui.notify(
+              info.attachedToCurrentClient
+                ? [
+                  `Tmux team panes ready (${info.paneCount} workers).`,
+                  "Opened worker panes in the current tmux window.",
+                  `Per-worker logs: ${info.logDir}/task-N.log`,
+                ].join("\n")
+                : [
+                  `Tmux team session ready (${info.paneCount} workers).`,
+                  `Attach in another terminal:  ${info.attachCommand}`,
+                  `Per-worker logs: ${info.logDir}/task-N.log`,
+                ].join("\n"),
+              "info",
+            );
+            ctx.ui.setStatus?.("harness", info.attachedToCurrentClient ? "Team running — current tmux window" : `Team running — ${info.attachCommand}`);
+          },
           runTask: (input) => runAgent({
             agent: input.agent ? { ...input.agent, maxSubagentDepth: 1 } : undefined,
             agentName: input.agentName,

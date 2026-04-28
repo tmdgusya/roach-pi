@@ -6,6 +6,7 @@ const tmuxMock = vi.hoisted(() => ({
   detectTmux: vi.fn(async (): Promise<TmuxAvailability> => ({ available: false })),
   createWorkerPanes: vi.fn(),
   killTmuxSession: vi.fn(async () => undefined),
+  killTmuxPane: vi.fn(async () => undefined),
 }));
 
 vi.mock("../tmux.js", () => tmuxMock);
@@ -24,6 +25,7 @@ afterEach(() => {
   tmuxMock.detectTmux.mockReset().mockResolvedValue({ available: false });
   tmuxMock.createWorkerPanes.mockReset();
   tmuxMock.killTmuxSession.mockReset().mockResolvedValue(undefined);
+  tmuxMock.killTmuxPane.mockReset().mockResolvedValue(undefined);
 });
 
 function fakeResult(agent: string, task: string, text: string, overrides: Partial<SingleResult> = {}): SingleResult {
@@ -240,6 +242,180 @@ describe("runTeam", () => {
     expect(summary.tasks[0].terminal).toMatchObject({ backend: "native" });
     expect(summary.success).toBe(true);
     expect(summary.finalSynthesis).toContain("fallback done");
+  });
+
+  it("emits backend resolved + tmux ready callbacks once with attach metadata when tmux runs", async () => {
+    tmuxMock.detectTmux.mockResolvedValue({ available: true, binary: "/usr/bin/tmux" });
+    tmuxMock.createWorkerPanes.mockResolvedValue([
+      {
+        sessionName: "pi-team-observability",
+        windowName: "workers",
+        paneId: "%1",
+        attachCommand: "tmux attach -t pi-team-observability",
+        logFile: "/tmp/team-observability/task-1.log",
+      },
+      {
+        sessionName: "pi-team-observability",
+        windowName: "workers",
+        paneId: "%2",
+        attachCommand: "tmux attach -t pi-team-observability",
+        logFile: "/tmp/team-observability/task-2.log",
+      },
+    ]);
+    const backendCalls: any[] = [];
+    const tmuxCalls: any[] = [];
+
+    const summary = await runTeam(
+      { goal: "Observe tmux lifecycle", workerCount: 2, agent: "worker", runId: "team-observability" },
+      {
+        runTask: async ({ task, prompt }) => fakeResult(task.agent, prompt, `${task.id} done`, { terminal: task.terminal }),
+        emitBackendResolved: (info) => backendCalls.push(info),
+        emitTmuxReady: (info) => tmuxCalls.push(info),
+      },
+    );
+
+    expect(summary.success).toBe(true);
+    expect(backendCalls).toHaveLength(1);
+    expect(backendCalls[0]).toEqual({ requested: "auto", used: "tmux", tmuxAvailable: true });
+    expect(tmuxCalls).toHaveLength(1);
+    expect(tmuxCalls[0]).toMatchObject({
+      sessionName: "pi-team-observability",
+      attachCommand: "tmux attach -t pi-team-observability",
+      paneCount: 2,
+      attachedToCurrentClient: false,
+    });
+    expect(typeof tmuxCalls[0].logDir).toBe("string");
+    expect(tmuxCalls[0].logDir).toContain("team-observability");
+  });
+
+  it("cleans up worker panes instead of killing the session when tmux is already attached", async () => {
+    tmuxMock.detectTmux.mockResolvedValue({ available: true, binary: "/usr/bin/tmux" });
+    tmuxMock.createWorkerPanes.mockResolvedValue([
+      {
+        sessionName: "dev-session",
+        windowName: "main",
+        paneId: "%11",
+        attachCommand: "tmux attach -t dev-session",
+        logFile: "/tmp/current-window/task-1.log",
+        placement: "current-window",
+      },
+      {
+        sessionName: "dev-session",
+        windowName: "main",
+        paneId: "%12",
+        attachCommand: "tmux attach -t dev-session",
+        logFile: "/tmp/current-window/task-2.log",
+        placement: "current-window",
+      },
+    ]);
+    const tmuxCalls: any[] = [];
+
+    const summary = await runTeam(
+      { goal: "Show workers in current tmux window", workerCount: 2, agent: "worker", runId: "current-window" },
+      {
+        runTask: async ({ task, prompt }) => fakeResult(task.agent, prompt, `${task.id} done`, { terminal: task.terminal }),
+        emitTmuxReady: (info) => tmuxCalls.push(info),
+      },
+    );
+
+    expect(summary.success).toBe(true);
+    expect(tmuxCalls).toHaveLength(1);
+    expect(tmuxCalls[0]).toMatchObject({
+      sessionName: "dev-session",
+      attachCommand: "tmux attach -t dev-session",
+      paneCount: 2,
+      attachedToCurrentClient: true,
+    });
+    expect(tmuxMock.killTmuxPane).toHaveBeenCalledTimes(2);
+    expect(tmuxMock.killTmuxPane).toHaveBeenNthCalledWith(1, "%11", undefined, "/usr/bin/tmux");
+    expect(tmuxMock.killTmuxPane).toHaveBeenNthCalledWith(2, "%12", undefined, "/usr/bin/tmux");
+    expect(tmuxMock.killTmuxSession).not.toHaveBeenCalled();
+  });
+
+  it("emits backend resolved with native fallback and never fires tmux ready when tmux is missing", async () => {
+    tmuxMock.detectTmux.mockResolvedValue({ available: false });
+    const backendCalls: any[] = [];
+    const tmuxCalls: any[] = [];
+
+    const summary = await runTeam(
+      { goal: "Native fallback observability", workerCount: 1, agent: "worker" },
+      {
+        runTask: async ({ task, prompt }) => fakeResult(task.agent, prompt, "native fallback done", { terminal: task.terminal }),
+        emitBackendResolved: (info) => backendCalls.push(info),
+        emitTmuxReady: (info) => tmuxCalls.push(info),
+      },
+    );
+
+    expect(summary.success).toBe(true);
+    expect(summary.backendUsed).toBe("native");
+    expect(backendCalls).toHaveLength(1);
+    expect(backendCalls[0]).toEqual({ requested: "auto", used: "native", tmuxAvailable: false });
+    expect(tmuxCalls).toHaveLength(0);
+  });
+
+  it("does not fire tmux ready on resume when all tasks are already terminal", async () => {
+    tmuxMock.detectTmux.mockResolvedValue({ available: true, binary: "/usr/bin/tmux" });
+    const [task] = createDefaultTeamTasks("Resume with nothing to run", 1, "worker");
+    task.status = "completed";
+    task.startedAt = "2026-04-27T00:00:00.000Z";
+    task.updatedAt = "2026-04-27T00:00:30.000Z";
+    task.completedAt = "2026-04-27T00:00:30.000Z";
+    const loadedRecord: any = {
+      schemaVersion: 1,
+      runId: "team-resume-done",
+      goal: "Resume with nothing to run",
+      createdAt: "2026-04-27T00:00:00.000Z",
+      updatedAt: "2026-04-27T00:00:30.000Z",
+      status: "running",
+      options: { goal: "Resume with nothing to run", backend: "tmux" },
+      tasks: [task],
+      events: [],
+      messages: [],
+    };
+    const backendCalls: any[] = [];
+    const tmuxCalls: any[] = [];
+
+    const summary = await runTeam(
+      { goal: "Resume with nothing to run", backend: "tmux", resumeRunId: "team-resume-done" },
+      {
+        now: () => "2026-04-27T00:01:00.000Z",
+        loadRun: async () => loadedRecord,
+        runTask: async () => {
+          throw new Error("no runnable tasks should remain");
+        },
+        emitBackendResolved: (info) => backendCalls.push(info),
+        emitTmuxReady: (info) => tmuxCalls.push(info),
+      },
+    );
+
+    expect(summary.backendUsed).toBe("tmux");
+    expect(backendCalls).toHaveLength(1);
+    expect(backendCalls[0]).toEqual({ requested: "tmux", used: "tmux", tmuxAvailable: true });
+    expect(tmuxCalls).toHaveLength(0);
+    expect(tmuxMock.createWorkerPanes).not.toHaveBeenCalled();
+  });
+
+  it("does not fire tmux ready when pane setup fails", async () => {
+    tmuxMock.detectTmux.mockResolvedValue({ available: true, binary: "/usr/bin/tmux" });
+    tmuxMock.createWorkerPanes.mockRejectedValue(new Error("pane setup boom"));
+    const backendCalls: any[] = [];
+    const tmuxCalls: any[] = [];
+
+    const summary = await runTeam(
+      { goal: "Pane setup failure", workerCount: 2, agent: "worker", runId: "pane-fail" },
+      {
+        runTask: async () => {
+          throw new Error("workers must not run after pane setup failure");
+        },
+        emitBackendResolved: (info) => backendCalls.push(info),
+        emitTmuxReady: (info) => tmuxCalls.push(info),
+      },
+    );
+
+    expect(summary.success).toBe(false);
+    expect(backendCalls).toHaveLength(1);
+    expect(backendCalls[0]).toEqual({ requested: "auto", used: "tmux", tmuxAvailable: true });
+    expect(tmuxCalls).toHaveLength(0);
   });
 
   it("persists lifecycle records plus inbox/outbox messages when persistence is enabled", async () => {

@@ -17,6 +17,14 @@ export interface TmuxPaneRef {
   logFile: string;
   tmuxBinary?: string;
   sessionAttempt?: string;
+  placement?: "detached-session" | "current-window";
+}
+
+interface CurrentTmuxContext {
+  sessionName: string;
+  windowName: string;
+  windowId: string;
+  paneId: string;
 }
 
 export interface CreateWorkerPanesOptions {
@@ -27,6 +35,7 @@ export interface CreateWorkerPanesOptions {
   binary?: string;
   commandRunner?: TmuxCommandRunner;
   suffixGenerator?: () => string;
+  env?: NodeJS.ProcessEnv;
 }
 
 export type TmuxCommandRunner = (
@@ -61,6 +70,17 @@ export function parsePaneIds(stdout: string): string[] {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
+}
+
+function parseCurrentTmuxContext(stdout: string, paneId: string): CurrentTmuxContext {
+  const [sessionName, windowName, windowId] = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  if (!sessionName || !windowName || !windowId) {
+    throw new Error("tmux did not return the current session/window context");
+  }
+  return { sessionName, windowName, windowId, paneId };
 }
 
 export async function detectTmux(commandRunner: TmuxCommandRunner = execFile as unknown as TmuxCommandRunner): Promise<TmuxAvailability> {
@@ -106,11 +126,28 @@ async function pipePane(
   await runCommand(commandRunner, binary, ["pipe-pane", "-t", paneId, "-o", `cat >> ${shellQuote(logFile)}`]);
 }
 
+async function detectCurrentTmuxContext(
+  commandRunner: TmuxCommandRunner,
+  binary: string,
+  env: NodeJS.ProcessEnv,
+): Promise<CurrentTmuxContext | null> {
+  if (!env.TMUX || !env.TMUX_PANE) return null;
+  const stdout = await runCommand(commandRunner, binary, [
+    "display-message",
+    "-p",
+    "-t",
+    env.TMUX_PANE,
+    "#{session_name}\n#{window_name}\n#{window_id}",
+  ]);
+  return parseCurrentTmuxContext(stdout, env.TMUX_PANE);
+}
+
 export async function createWorkerPanes(options: CreateWorkerPanesOptions): Promise<TmuxPaneRef[]> {
   const commandRunner = options.commandRunner ?? (execFile as unknown as TmuxCommandRunner);
   const binary = options.binary ?? "tmux";
+  const env = options.env ?? process.env;
   let sessionName = buildTmuxSessionName(options.runId);
-  const windowName = options.windowName ?? "workers";
+  const defaultWindowName = options.windowName ?? "workers";
   let attachCommand = buildAttachCommand({ sessionName });
   const paneRefs: TmuxPaneRef[] = [];
 
@@ -118,13 +155,39 @@ export async function createWorkerPanes(options: CreateWorkerPanesOptions): Prom
 
   await mkdir(options.logDir, { recursive: true });
 
+  const currentContext = await detectCurrentTmuxContext(commandRunner, binary, env);
+  if (currentContext) {
+    attachCommand = buildAttachCommand({ sessionName: currentContext.sessionName });
+    for (let index = 1; index <= options.workerCount; index += 1) {
+      const paneId = parsePaneIds(
+        await runCommand(commandRunner, binary, ["split-window", "-t", currentContext.paneId, "-P", "-F", "#{pane_id}"]),
+      )[0];
+      if (!paneId) throw new Error(`tmux did not return a pane id for worker ${index}`);
+
+      const logFile = join(options.logDir, `task-${index}.log`);
+      await pipePane(commandRunner, binary, paneId, logFile);
+      paneRefs.push({
+        sessionName: currentContext.sessionName,
+        windowName: currentContext.windowName,
+        paneId,
+        attachCommand,
+        logFile,
+        placement: "current-window",
+        ...(options.binary ? { tmuxBinary: binary } : {}),
+      });
+    }
+
+    await runCommand(commandRunner, binary, ["select-layout", "-t", currentContext.windowId, "tiled"]);
+    return paneRefs;
+  }
+
   const createSession = (name: string) => runCommand(commandRunner, binary, [
     "new-session",
     "-d",
     "-s",
     name,
     "-n",
-    windowName,
+    defaultWindowName,
     "-P",
     "-F",
     "#{pane_id}",
@@ -147,17 +210,18 @@ export async function createWorkerPanes(options: CreateWorkerPanesOptions): Prom
   await pipePane(commandRunner, binary, firstPaneId, firstLogFile);
   paneRefs.push({
     sessionName,
-    windowName,
+    windowName: defaultWindowName,
     paneId: firstPaneId,
     attachCommand,
     logFile: firstLogFile,
+    placement: "detached-session",
     ...(options.binary ? { tmuxBinary: binary } : {}),
     ...(sessionAttempt ? { sessionAttempt } : {}),
   });
 
   for (let index = 2; index <= options.workerCount; index += 1) {
     const paneId = parsePaneIds(
-      await runCommand(commandRunner, binary, ["split-window", "-t", `${sessionName}:${windowName}`, "-P", "-F", "#{pane_id}"]),
+      await runCommand(commandRunner, binary, ["split-window", "-t", `${sessionName}:${defaultWindowName}`, "-P", "-F", "#{pane_id}"]),
     )[0];
     if (!paneId) throw new Error(`tmux did not return a pane id for worker ${index}`);
 
@@ -165,16 +229,17 @@ export async function createWorkerPanes(options: CreateWorkerPanesOptions): Prom
     await pipePane(commandRunner, binary, paneId, logFile);
     paneRefs.push({
       sessionName,
-      windowName,
+      windowName: defaultWindowName,
       paneId,
       attachCommand,
       logFile,
+      placement: "detached-session",
       ...(options.binary ? { tmuxBinary: binary } : {}),
       ...(sessionAttempt ? { sessionAttempt } : {}),
     });
   }
 
-  await runCommand(commandRunner, binary, ["select-layout", "-t", `${sessionName}:${windowName}`, "tiled"]);
+  await runCommand(commandRunner, binary, ["select-layout", "-t", `${sessionName}:${defaultWindowName}`, "tiled"]);
   return paneRefs;
 }
 
@@ -185,6 +250,18 @@ export async function killTmuxSession(
 ): Promise<void> {
   try {
     await runCommand(commandRunner, binary, ["kill-session", "-t", sessionName]);
+  } catch {
+    // best-effort cleanup
+  }
+}
+
+export async function killTmuxPane(
+  paneId: string,
+  commandRunner: TmuxCommandRunner = execFile as unknown as TmuxCommandRunner,
+  binary = "tmux",
+): Promise<void> {
+  try {
+    await runCommand(commandRunner, binary, ["kill-pane", "-t", paneId]);
   } catch {
     // best-effort cleanup
   }

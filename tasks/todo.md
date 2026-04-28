@@ -149,6 +149,23 @@ Done when:
 - Final verification: `cd extensions/agentic-harness && npm run build && npm test` ✅
 - Focused regression: `cd extensions/agentic-harness && npm test -- --run tests/tmux.test.ts tests/team.test.ts tests/subagent-process.test.ts tests/extension.test.ts` ✅
 
+## Bug Fix Plan: team mode should auto split/attach inside an existing tmux client
+
+Done when:
+- [x] Reproduce the current behavior where team mode creates a detached tmux session instead of splitting the operator's active tmux client
+- [x] Add failing regression coverage for "inside tmux" pane creation/attach behavior
+- [x] Implement the smallest root-cause fix so team mode reuses the current tmux session/window when launched from tmux, while preserving detached fallback outside tmux
+- [x] Verify focused tmux/team/subagent tests and extension build pass
+
+### Bug fix results
+- Reproduced from the existing tmux helper behavior and tests: `createWorkerPanes()` always issued `tmux new-session -d ...`, so worker panes were created in a detached session rather than the operator's current tmux window.
+- Regression coverage added in `extensions/agentic-harness/tests/tmux.test.ts` for current-window pane creation and in `extensions/agentic-harness/tests/team.test.ts` for team-level ready/cleanup behavior.
+- Fix applied in `extensions/agentic-harness/tmux.ts`, `extensions/agentic-harness/team.ts`, and `extensions/agentic-harness/index.ts`: when `TMUX`/`TMUX_PANE` are present, team mode now splits worker panes into the current tmux window, emits a current-window ready message, and cleans up worker panes on successful completion; detached-session fallback remains unchanged outside tmux.
+- Docs updated: `extensions/agentic-harness/README.md`.
+- Verification:
+  - `cd extensions/agentic-harness && npm test -- --run tests/tmux.test.ts tests/team.test.ts` ✅
+  - `cd extensions/agentic-harness && npm test -- --run tests/subagent-process.test.ts tests/extension.test.ts && npm run build` ✅
+
 ## Plan: Team tmux backend bugfix hardening
 
 - [x] Review reported bug list with independent bug/security/performance reviewers

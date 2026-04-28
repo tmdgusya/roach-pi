@@ -1,7 +1,7 @@
 import type { AgentConfig } from "./agents.js";
 import { join } from "path";
 import { MAX_CONCURRENCY, MAX_PARALLEL_TASKS, mapWithConcurrencyLimit } from "./subagent.js";
-import { createWorkerPanes, detectTmux, killTmuxSession } from "./tmux.js";
+import { createWorkerPanes, detectTmux, killTmuxPane, killTmuxSession } from "./tmux.js";
 import { getResultSummaryText, isResultSuccess, type SingleResult } from "./types.js";
 import {
   createTeamRunRecord,
@@ -101,11 +101,29 @@ export interface TeamRunTaskInput {
   extraEnv: Record<string, string>;
 }
 
+export interface TeamBackendResolvedInfo {
+  requested: TeamBackend;
+  used: ResolvedTeamBackend;
+  // `used === "tmux"` with `tmuxAvailable === false` means the caller forced backend=tmux
+  // on a host without tmux — pane creation will fail in the catch branch immediately after.
+  tmuxAvailable: boolean;
+}
+
+export interface TeamTmuxReadyInfo {
+  sessionName: string;
+  attachCommand: string;
+  paneCount: number;
+  logDir: string;
+  attachedToCurrentClient?: boolean;
+}
+
 export interface TeamRuntime {
   findAgent?(name: string): AgentConfig | undefined;
   runTask(input: TeamRunTaskInput, index: number): Promise<SingleResult>;
   summarizeResult?(result: SingleResult, maxOutput?: number): string;
   emitProgress?(summary: TeamRunSummary): void;
+  emitBackendResolved?(info: TeamBackendResolvedInfo): void;
+  emitTmuxReady?(info: TeamTmuxReadyInfo): void;
   persistRun?(record: TeamRunRecord): void | Promise<void>;
   loadRun?(runId: string): TeamRunRecord | Promise<TeamRunRecord>;
   now?(): string;
@@ -253,7 +271,7 @@ export function synthesizeTeamRun(
       `- passed: ${verificationEvidence.passed}`,
       `- failed: ${verificationEvidence.failed}`,
       interruptedCount ? `- interrupted/running: ${interruptedCount}` : undefined,
-      backendUsed === "tmux" ? "- Tmux cleanup policy: successful runs are cleaned up automatically; failed runs leave sessions behind for debugging." : undefined,
+      backendUsed === "tmux" ? "- Tmux cleanup policy: successful runs are cleaned up automatically; failed runs leave tmux panes/sessions behind for debugging." : undefined,
     ].filter(Boolean).join("\n"),
     verificationEvidence,
   };
@@ -299,6 +317,11 @@ export async function runTeam(opts: TeamRunOptions, runtime: TeamRuntime): Promi
     : backendRequested === "native"
       ? "native"
       : tmuxAvailability.available ? "tmux" : "native";
+  runtime.emitBackendResolved?.({
+    requested: backendRequested,
+    used: backendUsed,
+    tmuxAvailable: tmuxAvailability.available,
+  });
   const now = runtime.now ?? (() => new Date().toISOString());
   const initialNow = now();
   const isResume = !!opts.resumeRunId;
@@ -343,6 +366,8 @@ export async function runTeam(opts: TeamRunOptions, runtime: TeamRuntime): Promi
 
   const runnableTasks = tasks.filter((task) => task.status === "pending");
   let tmuxSessionName: string | undefined;
+  let tmuxPaneIdsToCleanup: string[] = [];
+  let tmuxAttachedToCurrentClient = false;
   if (backendUsed === "tmux" && runnableTasks.length > 0) {
     try {
       const paneRefs = await createWorkerPanes({
@@ -357,6 +382,19 @@ export async function runTeam(opts: TeamRunOptions, runtime: TeamRuntime): Promi
           tmuxSessionName = pane.sessionName;
           task.terminal = { backend: "tmux", ...pane, ...(tmuxBinary ? { tmuxBinary } : {}) };
         }
+      }
+      if (paneRefs.length > 0) {
+        tmuxAttachedToCurrentClient = paneRefs[0].placement === "current-window";
+        if (tmuxAttachedToCurrentClient) {
+          tmuxPaneIdsToCleanup = paneRefs.map((pane) => pane.paneId);
+        }
+        runtime.emitTmuxReady?.({
+          sessionName: paneRefs[0].sessionName,
+          attachCommand: paneRefs[0].attachCommand,
+          paneCount: paneRefs.length,
+          logDir: join(process.cwd(), ".pi", "agent", "runs", record.runId, "tmux"),
+          attachedToCurrentClient: tmuxAttachedToCurrentClient,
+        });
       }
       await persistIfEnabled(runtime, record);
     } catch (error) {
@@ -466,8 +504,12 @@ export async function runTeam(opts: TeamRunOptions, runtime: TeamRuntime): Promi
     : tasks.some((task) => task.status === "interrupted" || task.status === "in_progress")
       ? "interrupted"
       : "failed";
-  if (backendUsed === "tmux" && summary.success && tmuxSessionName) {
-    await killTmuxSession(tmuxSessionName, undefined, tmuxBinary);
+  if (backendUsed === "tmux" && summary.success) {
+    if (tmuxAttachedToCurrentClient && tmuxPaneIdsToCleanup.length > 0) {
+      await Promise.all(tmuxPaneIdsToCleanup.map((paneId) => killTmuxPane(paneId, undefined, tmuxBinary)));
+    } else if (tmuxSessionName) {
+      await killTmuxSession(tmuxSessionName, undefined, tmuxBinary);
+    }
   }
   record = recordTeamEvent(record, { type: summary.success ? "run_completed" : "run_failed", createdAt: now() });
   record = setTeamRunStatus(record, finalStatus, now(), summary);

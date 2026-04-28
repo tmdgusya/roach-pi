@@ -356,6 +356,9 @@ describe.runIf(process.platform !== "win32")("runAgent process ownership", () =>
         depthConfig: resolveDepthConfig(),
         ownership: { runId: "tmux-custom-binary-run", owner: "test-suite" },
         executionMode: "tmux",
+        extraEnv: {
+          PI_DEBUG_SECRET: "super-secret-token-value",
+        },
         tmuxPane: {
           sessionName: "pi-team-run-custom-binary",
           windowName: "workers",
@@ -369,7 +372,9 @@ describe.runIf(process.platform !== "win32")("runAgent process ownership", () =>
 
       expect(result.exitCode).toBe(0);
       expect(result.messages.at(-1)?.content?.[0]?.text).toContain("custom tmux binary done");
-      expect(readFileSync(callsFile, "utf8")).toContain(`${customTmux} send-keys -t %1`);
+      const tmuxCalls = readFileSync(callsFile, "utf8");
+      expect(tmuxCalls).toContain(`${customTmux} send-keys -t %1`);
+      expect(tmuxCalls).not.toContain("super-secret-token-value");
       expect(result.terminal).toMatchObject({ backend: "tmux", tmuxBinary: customTmux });
     } finally {
       process.env.PATH = originalPath;

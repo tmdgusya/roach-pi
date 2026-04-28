@@ -277,7 +277,7 @@ function execFileAsync(file: string, args: readonly string[]): Promise<void> {
   });
 }
 
-function buildTmuxShellCommand(params: {
+export function buildTmuxShellCommand(params: {
   command: string;
   args: string[];
   cwd: string;
@@ -289,6 +289,25 @@ function buildTmuxShellCommand(params: {
   const command = [shellQuote(params.command), ...params.args.map(shellQuote)].join(" ");
   const invocation = ["env", ...envArgs, command].join(" ");
   return `{ cd ${shellQuote(params.cwd)} && ${invocation}; code=$?; printf '\\n${TMUX_EXIT_MARKER}%s\\n' "$code"; } 2>&1`;
+}
+
+export function buildTmuxLaunchScript(params: {
+  command: string;
+  args: string[];
+  cwd: string;
+  env: Record<string, string | undefined>;
+}): string {
+  const envArgs = Object.entries(params.env)
+    .filter((entry): entry is [string, string] => entry[1] !== undefined)
+    .map(([key, value]) => `${key}=${shellQuote(value)}`);
+  const command = [shellQuote(params.command), ...params.args.map(shellQuote)].join(" ");
+  const invocation = ["env", ...envArgs, command].join(" ");
+  return [
+    "#!/usr/bin/env bash",
+    `cd ${shellQuote(params.cwd)} || exit 1`,
+    `exec ${invocation}`,
+    "",
+  ].join("\n");
 }
 
 function generateRunId(): string {
@@ -542,25 +561,40 @@ export async function runAgent(opts: RunAgentOptions): Promise<SingleResult> {
       };
       await mkdir(dirname(tmuxPane.logFile), { recursive: true });
       await writeFile(tmuxPane.logFile, "", "utf-8");
+      const tmuxLaunchScript = join(
+        dirname(tmuxPane.logFile),
+        `.pi-tmux-launch-${resolvedOwnership.runId}-${randomBytes(8).toString("hex")}.sh`,
+      );
+      await writeFile(
+        tmuxLaunchScript,
+        buildTmuxLaunchScript({
+          command: resolvedSandbox.command,
+          args: resolvedSandbox.args,
+          cwd: runCwd,
+          env: resolvedSandbox.env,
+        }),
+        { encoding: "utf-8", mode: 0o700 },
+      );
       const tmuxCommand = buildTmuxShellCommand({
-        command: resolvedSandbox.command,
-        args: resolvedSandbox.args,
+        command: "/bin/bash",
+        args: [tmuxLaunchScript],
         cwd: runCwd,
-        env: resolvedSandbox.env,
+        env: {},
       });
       const tmuxBinary = tmuxPane.tmuxBinary ?? "tmux";
-      await execFileAsync(tmuxBinary, ["send-keys", "-t", tmuxPane.paneId, tmuxCommand, "Enter"]);
-      emitLifecycle({
-        phase: "spawned",
-        runId: resolvedOwnership.runId,
-        parentRunId: resolvedOwnership.parentRunId,
-        rootRunId: resolvedOwnership.rootRunId,
-        owner: resolvedOwnership.owner,
-        pid: 0,
-        ...tmuxLifecycleMetadata,
-      });
+      try {
+        await execFileAsync(tmuxBinary, ["send-keys", "-t", tmuxPane.paneId, tmuxCommand, "Enter"]);
+        emitLifecycle({
+          phase: "spawned",
+          runId: resolvedOwnership.runId,
+          parentRunId: resolvedOwnership.parentRunId,
+          rootRunId: resolvedOwnership.rootRunId,
+          owner: resolvedOwnership.owner,
+          pid: 0,
+          ...tmuxLifecycleMetadata,
+        });
 
-      exitCode = await new Promise<number>((resolve) => {
+        exitCode = await new Promise<number>((resolve) => {
         let readOffset = 0;
         let buffer = "";
         let settled = false;
@@ -676,6 +710,9 @@ export async function runAgent(opts: RunAgentOptions): Promise<SingleResult> {
 
         void poll();
       });
+      } finally {
+        await unlink(tmuxLaunchScript).catch(() => undefined);
+      }
     } else {
       exitCode = await new Promise<number>((resolve) => {
       const proc = spawn(resolvedSandbox.command, resolvedSandbox.args, {
