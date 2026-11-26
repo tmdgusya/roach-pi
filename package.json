@@ -1,56 +1,28 @@
 {
-  "name": "pi-engineering-discipline-extension",
-  "version": "1.40.2",
-  "description": "Advanced extension suite for pi-coding-agent, providing agentic harness and HUD dashboard.",
-  "keywords": [
-    "pi-package"
-  ],
-  "author": "tmdgusya",
+  "name": "roach-pi",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Roach harness built on @earendil-works/pi-durable",
+  "type": "module",
   "license": "MIT",
-  "pi": {
-    "extensions": [
-      "extensions/agentic-harness/index.ts",
-      "extensions/session-loop/index.ts",
-      "extensions/fff-search/index.ts",
-      "extensions/workspace-memory/index.ts",
-      "node_modules/@code-yeongyu/pi-nested-agents-md/src/index.ts",
-      "node_modules/pi-lsp-client/src/index.ts",
-      "extensions/pi-mcp-adapter/index.ts",
-      "extensions/pi-code-previews/index.ts"
-    ]
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tmdgusya/roach-pi.git"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "start": "node src/index.ts",
+    "check": "tsc --noEmit"
   },
   "dependencies": {
-    "@code-yeongyu/pi-nested-agents-md": "github:code-yeongyu/pi-nested-agents-md",
-    "@ff-labs/fff-node": "^0.6.4",
-    "@sinclair/typebox": "^0.34.49",
-    "diff": "^8.0.4",
-    "pi-lsp-client": "github:code-yeongyu/pi-lsp-client",
-    "pi-mcp-adapter": "github:nicobailon/pi-mcp-adapter",
-    "shiki": "^4.0.2",
-    "turndown": "^7.2.4",
-    "turndown-plugin-gfm": "^1.0.2"
+    "@earendil-works/chord": "1.6.1",
+    "@earendil-works/pi-ai": "1.6.1",
+    "@earendil-works/pi-durable": "1.6.1"
   },
-  "bundledDependencies": [
-    "@code-yeongyu/pi-nested-agents-md",
-    "pi-lsp-client",
-    "pi-mcp-adapter"
-  ],
   "devDependencies": {
-    "@semantic-release/changelog": "^6.0.3",
-    "@semantic-release/git": "^10.0.1",
-    "@semantic-release/github": "^12.0.6",
-    "@types/turndown": "^5.0.6",
-    "conventional-changelog-conventionalcommits": "^9.3.1",
-    "semantic-release": "^25.0.3"
-  },
-  "bundleDependencies": [
-    "@code-yeongyu/pi-nested-agents-md",
-    "pi-lsp-client",
-    "pi-mcp-adapter"
-  ],
-  "trustedDependencies": [
-    "@google/genai",
-    "koffi",
-    "protobufjs"
-  ]
+    "@types/node": "^22.19.0",
+    "typescript": "^5.9.0"
+  }
 }

@@ -6,3 +6,4 @@ node_modules/
 artifacts/
 comic/
 nul
+.roach/
