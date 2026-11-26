@@ -20,7 +20,11 @@ try {
 const { harness, root } = runtime;
 
 if (!prompt) {
-	await runTui(harness, root, context);
+	await runTui(runtime, context);
+} else if (!(await root.agent(context)).model) {
+	console.error("no model: run `npm start` and use /login, or set an API key (e.g. ANTHROPIC_API_KEY)");
+	await harness.close(context);
+	process.exitCode = 1;
 } else {
 	// Print mode: answer one prompt and exit.
 	try {

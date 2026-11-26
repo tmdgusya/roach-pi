@@ -1,15 +1,9 @@
 import { styleText } from "node:util";
 import type { Context } from "@earendil-works/chord/context";
 import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
-import type {
-	Conversation,
-	ConversationView,
-	EntryId,
-	EntryRecord,
-	Harness,
-	LiveState,
-} from "@earendil-works/pi-durable";
+import type { ConversationView, EntryId, EntryRecord, LiveState } from "@earendil-works/pi-durable";
 import {
+	CombinedAutocompleteProvider,
 	type Component,
 	Container,
 	Editor,
@@ -21,6 +15,9 @@ import {
 	Text,
 	TuiMainScreen,
 } from "@earendil-works/pi-tui";
+import { pick, selectListTheme } from "./dialogs.ts";
+import { login } from "./login.ts";
+import type { Runtime } from "./runtime.ts";
 
 type Style = Parameters<typeof styleText>[0];
 const style =
@@ -46,16 +43,13 @@ const markdownTheme: MarkdownTheme = {
 	strikethrough: style("strikethrough"),
 	underline: style("underline"),
 };
-const editorTheme: EditorTheme = {
-	borderColor: dim,
-	selectList: {
-		selectedPrefix: style("cyan"),
-		selectedText: style("cyan"),
-		description: dim,
-		scrollInfo: dim,
-		noMatch: dim,
-	},
-};
+const editorTheme: EditorTheme = { borderColor: dim, selectList: selectListTheme };
+
+const COMMANDS = [
+	{ name: "login", description: "Sign in to a model provider" },
+	{ name: "model", description: "Choose the model" },
+	{ name: "quit", description: "Exit" },
+];
 
 const oneLine = (text: string, max = 120): string => {
 	const line = text.replace(/\s+/g, " ").trim();
@@ -104,17 +98,19 @@ function entryComponents(entry: EntryRecord): Component[] {
 /**
  * Interactive chat over the root conversation. Everything shown comes from `root.watch()`: committed entries are
  * appended once, and `pi.live` (streamed partial answer, tool round, last run failure) is redrawn on each commit.
- * Resolves after the user quits (Ctrl+C or Ctrl+D) and the Harness is closed.
+ * Without a model it still starts: `/login` signs in and then offers that provider's models, `/model` switches.
+ * Resolves after the user quits (Ctrl+C, Ctrl+D, or /quit) and the Harness is closed.
  */
-export async function runTui(harness: Harness, root: Conversation, context: Context): Promise<void> {
+export async function runTui({ harness, root, models }: Runtime, context: Context): Promise<void> {
 	const agent = await root.agent(context);
-	const modelName = agent.model ? `${agent.model.provider}/${agent.model.modelId}` : "no model";
+	let modelName = agent.model ? `${agent.model.provider}/${agent.model.modelId}` : undefined;
 
 	const tui = new TuiMainScreen(new ProcessTerminal());
 	const transcript = new Container();
 	const live = new Container();
 	const status = new Text("", 1, 0);
 	const editor = new Editor(tui, editorTheme, { paddingX: 1 });
+	editor.setAutocompleteProvider(new CombinedAutocompleteProvider(COMMANDS, process.cwd()));
 	tui.addChild(transcript);
 	tui.addChild(live);
 	tui.addChild(editor);
@@ -123,10 +119,14 @@ export async function runTui(harness: Harness, root: Conversation, context: Cont
 
 	const shown = new Set<EntryId>();
 	let busy = false;
-	let notice: string | undefined;
+	let notice: string | undefined = modelName ? undefined : "no model: type /login to sign in";
+	const stopping = new AbortController();
 
 	const showStatus = () => {
-		const parts = [modelName, busy ? "working… (esc to abort)" : "enter to send · ctrl+c to quit"];
+		const parts = [
+			modelName ?? error("no model"),
+			busy ? "working… (esc to abort)" : "enter to send · / for commands · ctrl+c to quit",
+		];
 		if (notice) parts.push(notice);
 		status.setText(dim(parts.join(" · ")));
 	};
@@ -169,13 +169,65 @@ export async function runTui(harness: Harness, root: Conversation, context: Cont
 		showStatus();
 		tui.requestRender();
 	};
+	const say = (line: string) => {
+		transcript.addChild(new Text(dim(line), 1, 0));
+		tui.requestRender();
+	};
+
+	/** Picks among models whose provider has credentials, optionally one provider's, and stores the choice. */
+	const chooseModel = async (providerId?: string) => {
+		const available = (await models.getAvailable()).filter((m) => !providerId || m.provider === providerId);
+		if (available.length === 0) {
+			notice = error("no provider has credentials: type /login");
+			showStatus();
+			tui.requestRender();
+			return;
+		}
+		const chosen = await pick(
+			tui,
+			"Model",
+			available.map((m) => ({ value: `${m.provider}/${m.id}`, label: `${m.provider}/${m.id}`, description: m.name })),
+			stopping.signal,
+		);
+		const model = available.find((m) => `${m.provider}/${m.id}` === chosen);
+		if (!model) return;
+		await root.configure({ model: { provider: model.provider, modelId: model.id } }, context);
+		modelName = chosen;
+		notice = undefined;
+		showStatus();
+		tui.requestRender();
+	};
+
+	const command = async (name: string) => {
+		switch (name) {
+			case "login": {
+				const provider = await login(tui, models, say, stopping.signal);
+				if (provider) await chooseModel(provider.id);
+				return;
+			}
+			case "model":
+				return chooseModel();
+			case "quit":
+				return exit();
+			default:
+				throw new Error(`unknown command /${name}; try /login, /model, /quit`);
+		}
+	};
 
 	editor.onSubmit = (text) => {
 		const content = text.trim();
 		if (!content) return;
-		editor.addToHistory(content);
 		editor.setText("");
 		notice = undefined;
+		if (content.startsWith("/")) {
+			command(content.slice(1).split(/\s+/)[0]!).catch(report);
+			return;
+		}
+		if (!modelName) {
+			report(new Error("no model: type /login to sign in, or /model to choose one"));
+			return;
+		}
+		editor.addToHistory(content);
 		root.submit({ type: "input", content }, context).catch(report);
 	};
 	tui.addInputListener((data) => {
@@ -183,7 +235,7 @@ export async function runTui(harness: Harness, root: Conversation, context: Cont
 			exit();
 			return { consume: true };
 		}
-		if (matchesKey(data, "escape") && busy) {
+		if (matchesKey(data, "escape") && busy && !tui.hasOverlay()) {
 			root.abort(context).catch(report);
 			return { consume: true };
 		}
@@ -194,6 +246,7 @@ export async function runTui(harness: Harness, root: Conversation, context: Cont
 	try {
 		await quit;
 	} finally {
+		stopping.abort();
 		await watch.stop();
 		tui.stop();
 		await harness.close(context);

@@ -14,7 +14,6 @@
   },
   "scripts": {
     "start": "node src/index.ts",
-    "login": "node src/login.ts",
     "check": "tsc --noEmit"
   },
   "dependencies": {
