@@ -20,7 +20,7 @@
     "@earendil-works/chord": "1.6.1",
     "@earendil-works/pi-ai": "1.6.1",
     "@earendil-works/pi-durable": "1.6.1",
-    "@earendil-works/pi-tui": "^1.6.1"
+    "@earendil-works/pi-tui": "1.6.1"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",
