@@ -1,7 +1,7 @@
 import { parseArgs } from "node:util";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { AssistantEntry } from "@earendil-works/pi-durable";
-import { openRuntime } from "./runtime.ts";
+import { openRuntime, type Runtime } from "./runtime.ts";
 import { runTui } from "./tui.ts";
 
 const context = BACKGROUND_CONTEXT;
@@ -10,7 +10,14 @@ const { values, positionals } = parseArgs({
 	options: { model: { type: "string", short: "m" } },
 });
 const prompt = positionals.join(" ");
-const { harness, root } = await openRuntime(values.model, context);
+let runtime: Runtime;
+try {
+	runtime = await openRuntime(values.model, context);
+} catch (error) {
+	console.error(error instanceof Error ? error.message : error);
+	process.exit(1);
+}
+const { harness, root } = runtime;
 
 if (!prompt) {
 	await runTui(harness, root, context);

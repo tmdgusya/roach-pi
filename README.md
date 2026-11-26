@@ -5,12 +5,13 @@ Rebuild of roach-pi on [`@earendil-works/pi-durable`](https://github.com/earendi
 ## Requirements
 
 - Node.js >= 22.19
-- Credentials for any provider pi-ai supports (e.g. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`)
+- Credentials for any provider pi-ai supports: `npm run login` (OAuth subscription sign-in such as Claude Pro/Max or ChatGPT, or an API key; saved to `~/.roach/auth.json`), or an env var such as `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`. A stored credential takes precedence over the env var.
 
 ## Usage
 
 ```bash
 npm install
+npm run login                                     # pick a provider and sign in (or: npm run login -- anthropic)
 npm start                                         # interactive TUI
 npm start -- --model anthropic/claude-sonnet-4-5  # TUI with a chosen model
 npm start -- "What is the capital of France?"     # print mode: answer one prompt and exit
