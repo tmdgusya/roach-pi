@@ -1,25 +1,39 @@
 import { mkdir } from "node:fs/promises";
+import { parseArgs } from "node:util";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
+import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { AssistantEntry, createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 
 const context = BACKGROUND_CONTEXT;
-const prompt = process.argv.slice(2).join(" ");
+const { values, positionals } = parseArgs({
+	allowPositionals: true,
+	options: { model: { type: "string", short: "m" } },
+});
+const prompt = positionals.join(" ");
 if (!prompt) {
-	console.error("usage: npm start -- <prompt>");
+	console.error("usage: npm start -- [--model <provider>/<modelId>] <prompt>");
 	process.exit(1);
 }
 
-const models = createModels();
-models.setProvider(openaiProvider()); // reads OPENAI_API_KEY
+const models = builtinModels(); // every built-in provider; credentials come from env or the credential store
 
 await mkdir(".roach", { recursive: true });
 const storage = await openNodeSqliteStorage(".roach/session.sqlite");
 const harness = await Harness.open(storage, { models, registry: createRegistry() }, context);
 try {
-	const root = await harness.root(context, { agent: { model: { provider: "openai", modelId: "gpt-6-sol" } } });
+	const root = await harness.root(context);
+	if (values.model) {
+		const slash = values.model.indexOf("/");
+		if (slash <= 0) throw new Error(`--model must be <provider>/<modelId>, got "${values.model}"`);
+		const model = { provider: values.model.slice(0, slash), modelId: values.model.slice(slash + 1) };
+		if (!models.getModel(model.provider, model.modelId)) throw new Error(`unknown model: ${values.model}`);
+		await root.configure({ model }, context);
+	} else if (!(await root.agent(context)).model) {
+		const [first] = await models.getAvailable();
+		if (!first) throw new Error("no provider has credentials; set an API key (e.g. ANTHROPIC_API_KEY) or pass --model");
+		await root.configure({ model: { provider: first.provider, modelId: first.id } }, context);
+	}
 	harness.resume();
 
 	const submission = await root.submit({ type: "input", content: prompt }, context);
